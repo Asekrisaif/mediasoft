@@ -462,22 +462,51 @@ export const sendNotificationToAllClients = async (req: Request, res: Response):
         // Récupérer tous les clients
         const clients = await prisma.utilisateur.findMany({
             where: {
-                role: 'client' // Filtrer par rôle "client"
-            }
+                role: 'client',
+            },
         });
 
-        // Envoyer une notification à chaque client
-        const notifications = clients.map(client => ({
-            message,
-            dateEnvoi: new Date(),
-            statut: 'non lu', // Par défaut, la notification est "non lue"
-            utilisateur_id: client.id
-        }));
-
-        // Créer les notifications en base de données
-        await prisma.notification.createMany({
-            data: notifications
+        // Configurer Nodemailer
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASSWORD,
+            },
         });
+
+        // Envoyer un e-mail à chaque client et enregistrer la notification
+        for (const client of clients) {
+            const notification = await prisma.notification.create({
+                data: {
+                    message,
+                    dateEnvoi: new Date(),
+                    statut: 'non lu',
+                    utilisateur_id: client.id,
+                },
+            });
+
+            // Créer un lien unique pour marquer la notification comme lue
+            const markAsReadLink = `http://localhost:3000/api/users/notifications/${notification.id}/mark-as-read`;
+
+            const mailOptions = {
+                from: process.env.EMAIL_USER,
+                to: client.email,
+                subject: 'Nouvelle Notification',
+                html: `
+                    <p>${message}</p>
+                    <p><a href="${markAsReadLink}">Cliquez ici pour marquer cette notification comme lue</a></p>
+                `,
+            };
+
+            transporter.sendMail(mailOptions, (error, info) => {
+                if (error) {
+                    console.error(`Erreur lors de l'envoi de l'e-mail à ${client.email}:`, error);
+                } else {
+                    console.log(`E-mail envoyé à ${client.email}:`, info.response);
+                }
+            });
+        }
 
         res.status(200).json({ message: 'Notifications envoyées à tous les clients avec succès.' });
     } catch (err) {
@@ -502,12 +531,12 @@ export const markNotificationAsRead = async (req: Request, res: Response): Promi
         // Mettre à jour le statut de la notification
         const updatedNotification = await prisma.notification.update({
             where: { id: Number(notificationId) },
-            data: { statut: 'lu' }
+            data: { statut: 'lu' },
         });
 
         res.status(200).json({
             message: 'Notification marquée comme lue avec succès',
-            notification: updatedNotification
+            notification: updatedNotification,
         });
     } catch (err) {
         if (err instanceof Error) {
@@ -516,35 +545,6 @@ export const markNotificationAsRead = async (req: Request, res: Response): Promi
         } else {
             console.error('Erreur inconnue:', err);
             res.status(500).json({ error: 'Erreur inconnue lors de la mise à jour de la notification' });
-        }
-    }
-};
-export const getClientNotifications = async (req: Request, res: Response): Promise<void> => {
-    const { clientId } = req.params;
-
-    if (!clientId || isNaN(Number(clientId))) {
-        res.status(400).json({ error: 'ID de client invalide ou manquant.' });
-        return;
-    }
-
-    try {
-        const notifications = await prisma.notification.findMany({
-            where: {
-                utilisateur_id: Number(clientId)
-            },
-            orderBy: {
-                dateEnvoi: 'desc' // Trier par date d'envoi décroissante
-            }
-        });
-
-        res.status(200).json({ notifications });
-    } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors de la récupération des notifications', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de la récupération des notifications' });
         }
     }
 };
