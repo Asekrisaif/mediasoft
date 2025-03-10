@@ -5,10 +5,13 @@ CREATE TABLE "Utilisateur" (
     "prenom" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "telephone" TEXT NOT NULL,
-    "adresse" TEXT NOT NULL,
+    "ville" TEXT NOT NULL DEFAULT '',
+    "codePostal" TEXT NOT NULL DEFAULT '',
+    "gouvernorat" TEXT NOT NULL DEFAULT '',
     "motDePasse" TEXT NOT NULL,
     "role" VARCHAR(10) NOT NULL,
     "inscritLe" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "statut" TEXT NOT NULL DEFAULT 'actif',
 
     CONSTRAINT "Utilisateur_pkey" PRIMARY KEY ("id")
 );
@@ -32,6 +35,7 @@ CREATE TABLE "Admin" (
 -- CreateTable
 CREATE TABLE "Avis" (
     "id" SERIAL NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL,
     "note" INTEGER NOT NULL,
     "commentaire" TEXT,
     "utilisateur_id" INTEGER NOT NULL,
@@ -43,8 +47,8 @@ CREATE TABLE "Avis" (
 CREATE TABLE "Notification" (
     "id" SERIAL NOT NULL,
     "message" TEXT NOT NULL,
-    "dateEnvoi" TIMESTAMP(3) NOT NULL,
-    "statut" VARCHAR(20) NOT NULL,
+    "dateEnvoi" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "statut" VARCHAR(20) NOT NULL DEFAULT 'non lu',
     "utilisateur_id" INTEGER NOT NULL,
 
     CONSTRAINT "Notification_pkey" PRIMARY KEY ("id")
@@ -63,6 +67,7 @@ CREATE TABLE "Panier" (
     "id" SERIAL NOT NULL,
     "date" TIMESTAMP(3) NOT NULL,
     "total" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "livrerDomicile" BOOLEAN NOT NULL DEFAULT false,
     "client_id" INTEGER NOT NULL,
 
     CONSTRAINT "Panier_pkey" PRIMARY KEY ("id")
@@ -72,11 +77,10 @@ CREATE TABLE "Panier" (
 CREATE TABLE "Produit" (
     "id" SERIAL NOT NULL,
     "designation" TEXT NOT NULL,
-    "description" TEXT,
-    "prixHT" DOUBLE PRECISION NOT NULL,
-    "tva" DOUBLE PRECISION NOT NULL,
-    "prixTTC" DOUBLE PRECISION NOT NULL,
-    "stock" INTEGER NOT NULL,
+    "qteStock" INTEGER NOT NULL,
+    "prix" DOUBLE PRECISION NOT NULL,
+    "nbrPoint" INTEGER NOT NULL,
+    "seuilMin" INTEGER NOT NULL,
     "deleted" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "Produit_pkey" PRIMARY KEY ("id")
@@ -86,7 +90,7 @@ CREATE TABLE "Produit" (
 CREATE TABLE "LignePanier" (
     "id" SERIAL NOT NULL,
     "prix" DOUBLE PRECISION NOT NULL,
-    "quantite" INTEGER NOT NULL,
+    "qteCmd" INTEGER NOT NULL,
     "sousTotal" DOUBLE PRECISION NOT NULL,
     "panier_id" INTEGER NOT NULL,
     "produit_id" INTEGER NOT NULL,
@@ -98,7 +102,11 @@ CREATE TABLE "LignePanier" (
 CREATE TABLE "Commande" (
     "id" SERIAL NOT NULL,
     "total" DOUBLE PRECISION NOT NULL,
-    "montantPaiement" DOUBLE PRECISION NOT NULL,
+    "remise" DOUBLE PRECISION NOT NULL,
+    "montantPoint" DOUBLE PRECISION NOT NULL,
+    "montantLivraison" DOUBLE PRECISION NOT NULL,
+    "montantAPayer" DOUBLE PRECISION NOT NULL,
+    "dateLivraison" TIMESTAMP(3) NOT NULL,
     "client_id" INTEGER NOT NULL,
     "panier_id" INTEGER NOT NULL,
 
@@ -127,11 +135,34 @@ CREATE TABLE "MessageInfo" (
     CONSTRAINT "MessageInfo_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Messagerie" (
+    "id" SERIAL NOT NULL,
+    "contenu" TEXT NOT NULL,
+    "date_envoi" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "utilisateur_id" INTEGER NOT NULL,
+
+    CONSTRAINT "Messagerie_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ResetToken" (
+    "id" SERIAL NOT NULL,
+    "token" TEXT NOT NULL,
+    "utilisateur_id" INTEGER NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ResetToken_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Utilisateur_email_key" ON "Utilisateur"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Chatbot_utilisateur_id_key" ON "Chatbot"("utilisateur_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ResetToken_token_key" ON "ResetToken"("token");
 
 -- AddForeignKey
 ALTER TABLE "Client" ADD CONSTRAINT "Client_id_fkey" FOREIGN KEY ("id") REFERENCES "Utilisateur"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -168,3 +199,9 @@ ALTER TABLE "Livraison" ADD CONSTRAINT "Livraison_commande_id_fkey" FOREIGN KEY 
 
 -- AddForeignKey
 ALTER TABLE "MessageInfo" ADD CONSTRAINT "MessageInfo_utilisateur_id_fkey" FOREIGN KEY ("utilisateur_id") REFERENCES "Utilisateur"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Messagerie" ADD CONSTRAINT "Messagerie_utilisateur_id_fkey" FOREIGN KEY ("utilisateur_id") REFERENCES "Utilisateur"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ResetToken" ADD CONSTRAINT "ResetToken_utilisateur_id_fkey" FOREIGN KEY ("utilisateur_id") REFERENCES "Utilisateur"("id") ON DELETE CASCADE ON UPDATE CASCADE;

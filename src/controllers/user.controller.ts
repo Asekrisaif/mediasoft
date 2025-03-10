@@ -1,12 +1,11 @@
 import { Request, Response } from "express";
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
-import nodemailer from 'nodemailer'; // Pour envoyer des emails
+import nodemailer from 'nodemailer';
 import { createObjectCsvWriter } from 'csv-writer';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
-
 
 const prisma = new PrismaClient();
 
@@ -15,11 +14,8 @@ const generateResetToken = (): string => {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 };
 
-
 export const getDefault = (req: Request, res: Response): void => {
-    res.json({
-        msg: 'API fonctionnelle'
-    });
+    res.json({ msg: 'API fonctionnelle' });
 };
 
 export const getUsers = async (req: Request, res: Response): Promise<void> => {
@@ -27,53 +23,39 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
         const users = await prisma.utilisateur.findMany();
         res.json({ users });
     } catch (err) {
-        // Typer l'erreur comme un objet Error
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors de la récupération des utilisateurs', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de la récupération des utilisateurs' });
-        }
+        console.error('Erreur SQL:', err);
+        res.status(500).json({ error: 'Erreur lors de la récupération des utilisateurs', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
 
 export const addUser = async (req: Request, res: Response): Promise<void> => {
-    const { nom, prenom, email, telephone, adresse, motDePasse, role } = req.body;
+    const { nom, prenom, email, telephone, motDePasse, role, ville, codePostal, gouvernorat } = req.body;
 
-    if (!nom || !prenom || !email || !telephone || !adresse || !motDePasse || !role) {
+    if (!nom || !prenom || !email || !telephone || !motDePasse || !role || !ville || !codePostal || !gouvernorat) {
         res.status(400).json({ error: 'Tous les champs sont requis.' });
         return;
     }
 
     try {
-        // Hacher le mot de passe avant de l'enregistrer
         const hashedPassword = await bcrypt.hash(motDePasse, 10);
-
         const newUser = await prisma.utilisateur.create({
             data: {
                 nom,
                 prenom,
                 email,
                 telephone,
-                adresse,
-                motDePasse: hashedPassword, // Utiliser le mot de passe haché
+                motDePasse: hashedPassword,
                 role,
-                inscritLe: new Date()
+                inscritLe: new Date(),
+                ville, // Ensure this field is recognized
+                codePostal, // Ensure this field is recognized
+                gouvernorat // Ensure this field is recognized
             }
         });
-        res.status(201).json({
-            message: 'Utilisateur ajouté avec succès',
-            user: newUser
-        });
+        res.status(201).json({ message: 'Utilisateur ajouté avec succès', user: newUser });
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors de l\'ajout de l\'utilisateur.', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de l\'ajout de l\'utilisateur.' });
-        }
+        console.error('Erreur SQL:', err);
+        res.status(500).json({ error: 'Erreur lors de l\'ajout de l\'utilisateur.', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
 
@@ -81,49 +63,22 @@ export const checkUser = async (req: Request, res: Response): Promise<void> => {
     const { email, motDePasse } = req.body;
 
     try {
-        const user = await prisma.utilisateur.findUnique({
-            where: { email }
-        });
+        const user = await prisma.utilisateur.findUnique({ where: { email } });
 
         if (!user) {
             res.status(404).json({ error: 'Compte incorrect' });
             return;
         }
 
-        // Vérifier si le mot de passe est haché ou non
-        const isPasswordHashed = user.motDePasse.startsWith('$2b$'); // Vérifie si le mot de passe commence par le préfixe de hachage bcrypt
-
-        if (isPasswordHashed) {
-            // Si le mot de passe est haché, utilisez bcrypt pour comparer
-            const isPasswordValid = await bcrypt.compare(motDePasse, user.motDePasse);
-
-            if (isPasswordValid) {
-                res.json({
-                    message: 'Compte correct',
-                    user
-                });
-            } else {
-                res.status(404).json({ error: 'Compte incorrect' });
-            }
+        const isPasswordValid = await bcrypt.compare(motDePasse, user.motDePasse);
+        if (isPasswordValid) {
+            res.json({ message: 'Compte correct', user });
         } else {
-            // Si le mot de passe n'est pas haché, comparez directement
-            if (user.motDePasse === motDePasse) {
-                res.json({
-                    message: 'Compte correct',
-                    user
-                });
-            } else {
-                res.status(404).json({ error: 'Compte incorrect' });
-            }
+            res.status(404).json({ error: 'Compte incorrect' });
         }
     } catch (err) {
-        if (err instanceof Error) {
-            console.error(err);
-            res.status(500).json({ error: 'Erreur lors de la vérification de l\'utilisateur', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de la vérification de l\'utilisateur' });
-        }
+        console.error('Erreur lors de la vérification de l\'utilisateur:', err);
+        res.status(500).json({ error: 'Erreur lors de la vérification de l\'utilisateur', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
 
@@ -136,9 +91,7 @@ export const getUserById = async (req: Request, res: Response): Promise<void> =>
     }
 
     try {
-        const user = await prisma.utilisateur.findUnique({
-            where: { id: Number(id) } // Convertir l'ID en nombre
-        });
+        const user = await prisma.utilisateur.findUnique({ where: { id: Number(id) } });
 
         if (user) {
             res.json({ user });
@@ -146,26 +99,21 @@ export const getUserById = async (req: Request, res: Response): Promise<void> =>
             res.status(404).json({ error: 'Utilisateur non trouvé' });
         }
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors de la récupération de l\'utilisateur', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de la récupération de l\'utilisateur' });
-        }
+        console.error('Erreur SQL:', err);
+        res.status(500).json({ error: 'Erreur lors de la récupération de l\'utilisateur', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
 
 export const updateUser = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { nom, prenom, email, telephone, adresse, motDePasse } = req.body;
+    const { nom, prenom, email, telephone, motDePasse, ville, codePostal, gouvernorat } = req.body;
 
     if (isNaN(Number(id))) {
         res.status(400).json({ error: 'ID invalide' });
         return;
     }
 
-    if (!nom || !prenom || !email || !telephone || !adresse || !motDePasse ) {
+    if (!nom || !prenom || !email || !telephone || !motDePasse || !ville || !codePostal || !gouvernorat) {
         res.status(400).json({ error: 'Tous les champs sont requis.' });
         return;
     }
@@ -178,26 +126,19 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
                 prenom,
                 email,
                 telephone,
-                adresse,
                 motDePasse,
-             
+                ville, // Ensure this field is recognized
+                codePostal, // Ensure this field is recognized
+                gouvernorat // Ensure this field is recognized
             }
         });
-        res.status(200).json({
-            message: 'Utilisateur mis à jour avec succès',
-            user: updatedUser
-        });
+        res.status(200).json({ message: 'Utilisateur mis à jour avec succès', user: updatedUser });
     } catch (err) {
-        // Typer l'erreur comme un objet Error
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors de la mise à jour de l\'utilisateur', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de la mise à jour de l\'utilisateur' });
-        }
+        console.error('Erreur SQL:', err);
+        res.status(500).json({ error: 'Erreur lors de la mise à jour de l\'utilisateur', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
+
 export const searchUsers = async (req: Request, res: Response): Promise<void> => {
     const { query } = req.query;
 
@@ -219,61 +160,18 @@ export const searchUsers = async (req: Request, res: Response): Promise<void> =>
 
         res.json({ users });
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors de la recherche des utilisateurs', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de la recherche des utilisateurs' });
-        }
+        console.error('Erreur SQL:', err);
+        res.status(500).json({ error: 'Erreur lors de la recherche des utilisateurs', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
-/*export const changePassword = async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
-    const { newPassword } = req.body;
-
-    if (!id || isNaN(Number(id))) {
-        res.status(400).json({ error: 'ID invalide ou manquant.' });
-        return;
-    }
-
-    if (!newPassword) {
-        res.status(400).json({ error: 'Le nouveau mot de passe est requis.' });
-        return;
-    }
-
-    try {
-        // Hasher le nouveau mot de passe
-        const hashedPassword = await bcrypt.hash(newPassword, 10); // 10 est le coût du hachage
-
-        // Mettre à jour le mot de passe dans la base de données
-        const updatedUser = await prisma.utilisateur.update({
-            where: { id: Number(id) },
-            data: { motDePasse: hashedPassword }
-        });
-
-        res.status(200).json({
-            message: 'Mot de passe mis à jour avec succès',
-            user: updatedUser
-        });
-    } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors de la mise à jour du mot de passe', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de la mise à jour du mot de passe' });
-        }
-    }
-};*/
 
 // Fonction pour envoyer un email
 const sendResetEmail = async (email: string, resetLink: string): Promise<void> => {
     const transporter = nodemailer.createTransport({
-        service: 'gmail', // Utilisez un service de messagerie comme Gmail
+        service: 'gmail',
         auth: {
-            user: process.env.EMAIL_USER, // Votre adresse email
-            pass: process.env.EMAIL_PASSWORD // Votre mot de passe email
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASSWORD
         }
     });
 
@@ -296,9 +194,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     }
 
     try {
-        const user = await prisma.utilisateur.findUnique({
-            where: { email }
-        });
+        const user = await prisma.utilisateur.findUnique({ where: { email } });
 
         if (!user) {
             res.status(404).json({ error: 'Utilisateur non trouvé.' });
@@ -308,31 +204,23 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
         const resetToken = generateResetToken();
         const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`;
 
-        // Enregistrez le token dans la base de données (par exemple, dans une table dédiée)
         await prisma.resetToken.create({
             data: {
                 token: resetToken,
                 utilisateur_id: user.id,
-                expiresAt: new Date(Date.now() + 3600000) // Expire dans 1 heure
+                expiresAt: new Date(Date.now() + 3600000)
             }
         });
 
-        // Envoyez l'email de réinitialisation
         await sendResetEmail(email, resetLink);
 
         res.status(200).json({ message: 'Un lien de réinitialisation a été envoyé à votre adresse email.' });
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur lors de la réinitialisation du mot de passe:', err);
-            res.status(500).json({ error: 'Erreur lors de la réinitialisation du mot de passe', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de la réinitialisation du mot de passe' });
-        }
+        console.error('Erreur lors de la réinitialisation du mot de passe:', err);
+        res.status(500).json({ error: 'Erreur lors de la réinitialisation du mot de passe', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
 
-// user.controller.ts
 export const verifyResetToken = async (req: Request, res: Response): Promise<void> => {
     const { token, newPassword } = req.body;
 
@@ -342,12 +230,8 @@ export const verifyResetToken = async (req: Request, res: Response): Promise<voi
     }
 
     try {
-        // Vérifier si le token existe et n'a pas expiré
         const resetToken = await prisma.resetToken.findFirst({
-            where: {
-                token,
-                expiresAt: { gt: new Date() } // Vérifier que le token n'a pas expiré
-            }
+            where: { token, expiresAt: { gt: new Date() } }
         });
 
         if (!resetToken) {
@@ -355,32 +239,22 @@ export const verifyResetToken = async (req: Request, res: Response): Promise<voi
             return;
         }
 
-        // Hasher le nouveau mot de passe
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-        // Mettre à jour le mot de passe de l'utilisateur
         await prisma.utilisateur.update({
             where: { id: resetToken.utilisateur_id },
             data: { motDePasse: hashedPassword }
         });
 
-        // Supprimer le token après utilisation
-        await prisma.resetToken.delete({
-            where: { id: resetToken.id }
-        });
+        await prisma.resetToken.delete({ where: { id: resetToken.id } });
 
         res.status(200).json({ message: 'Mot de passe mis à jour avec succès.' });
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur lors de la vérification du token:', err);
-            res.status(500).json({ error: 'Erreur lors de la vérification du token', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de la vérification du token' });
-        }
+        console.error('Erreur lors de la vérification du token:', err);
+        res.status(500).json({ error: 'Erreur lors de la vérification du token', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
-// user.controller.ts
+
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
     const { email } = req.body;
 
@@ -390,36 +264,29 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     }
 
     try {
-        // Vérifier si l'email existe dans la base de données
-        const user = await prisma.utilisateur.findUnique({
-            where: { email }
-        });
+        const user = await prisma.utilisateur.findUnique({ where: { email } });
 
         if (!user) {
-            // Si l'email n'existe pas, renvoyer un message d'erreur
             res.status(404).json({ error: 'Aucun utilisateur trouvé avec cet email.' });
             return;
         }
 
-        // Générer un token de réinitialisation
         const resetToken = generateResetToken();
         const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`;
 
-        // Enregistrer le token dans la base de données
         await prisma.resetToken.create({
             data: {
                 token: resetToken,
                 utilisateur_id: user.id,
-                expiresAt: new Date(Date.now() + 3600000) // Expire dans 1 heure
+                expiresAt: new Date(Date.now() + 3600000)
             }
         });
 
-        // Envoyer l'email de réinitialisation
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {
-                user: process.env.EMAIL_USER, // Votre adresse email
-                pass: process.env.EMAIL_PASSWORD // Votre mot de passe email
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASSWORD
             }
         });
 
@@ -434,13 +301,8 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
         res.status(200).json({ message: 'Un lien de réinitialisation a été envoyé à votre adresse email.' });
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur lors de l\'envoi de l\'email:', err);
-            res.status(500).json({ error: 'Erreur lors de l\'envoi de l\'email', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de l\'envoi de l\'email' });
-        }
+        console.error('Erreur lors de l\'envoi de l\'email:', err);
+        res.status(500).json({ error: 'Erreur lors de l\'envoi de l\'email', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
 
@@ -458,18 +320,10 @@ export const blockUser = async (req: Request, res: Response): Promise<void> => {
             data: { statut: 'bloqué' }
         });
 
-        res.status(200).json({
-            message: 'Utilisateur bloqué avec succès',
-            user: updatedUser
-        });
+        res.status(200).json({ message: 'Utilisateur bloqué avec succès', user: updatedUser });
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors du blocage de l\'utilisateur', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors du blocage de l\'utilisateur' });
-        }
+        console.error('Erreur SQL:', err);
+        res.status(500).json({ error: 'Erreur lors du blocage de l\'utilisateur', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
 
@@ -487,66 +341,48 @@ export const unblockUser = async (req: Request, res: Response): Promise<void> =>
             data: { statut: 'actif' }
         });
 
-        res.status(200).json({
-            message: 'Utilisateur débloqué avec succès',
-            user: updatedUser
-        });
+        res.status(200).json({ message: 'Utilisateur débloqué avec succès', user: updatedUser });
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors du déblocage de l\'utilisateur', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors du déblocage de l\'utilisateur' });
-        }
+        console.error('Erreur SQL:', err);
+        res.status(500).json({ error: 'Erreur lors du déblocage de l\'utilisateur', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
 
 export const exportUsers = async (req: Request, res: Response): Promise<void> => {
-    const { format } = req.params; // Récupérer le format (CSV ou PDF)
+    const { format } = req.params;
 
     try {
-        // Récupérer uniquement les utilisateurs avec le rôle "client"
         const clients = await prisma.utilisateur.findMany({
-            where: {
-                role: 'client', // Filtrer par rôle "client"
-            },
-            include: {
-                client: true, // Inclure les détails du client si nécessaire
-            },
+            where: { role: 'client' },
+            include: { client: true }
         });
 
-        // Exporter selon le format demandé
         if (format === 'csv') {
-            await exportToCSV(clients, res); // Passer uniquement les clients
+            await exportToCSV(clients, res);
         } else if (format === 'pdf') {
-            await exportToPDF(clients, res); // Passer uniquement les clients
+            await exportToPDF(clients, res);
         } else {
             res.status(400).json({ error: 'Format non supporté. Utilisez "csv" ou "pdf".' });
         }
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur lors de l\'exportation des utilisateurs:', err);
-            res.status(500).json({ error: 'Erreur lors de l\'exportation des utilisateurs', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de l\'exportation des utilisateurs' });
-        }
+        console.error('Erreur lors de l\'exportation des utilisateurs:', err);
+        res.status(500).json({ error: 'Erreur lors de l\'exportation des utilisateurs', details: err instanceof Error ? err.message : 'Erreur inconnue' });
     }
 };
 
-// Fonction pour exporter en CSV
 const exportToCSV = async (clients: any[], res: Response): Promise<void> => {
-    const filePath = path.join(__dirname, 'export.csv'); // Chemin du fichier CSV
+    const filePath = path.join(__dirname, 'export.csv');
     const csvWriter = createObjectCsvWriter({
-        path: filePath, // Utiliser le chemin absolu
+        path: filePath,
         header: [
             { id: 'id', title: 'ID' },
             { id: 'nom', title: 'Nom' },
             { id: 'prenom', title: 'Prénom' },
             { id: 'email', title: 'Email' },
             { id: 'telephone', title: 'Téléphone' },
-            { id: 'adresse', title: 'Adresse' },
+            { id: 'ville', title: 'Ville' },
+            { id: 'codePostal', title: 'Code Postal' },
+            { id: 'gouvernorat', title: 'Gouvernorat' },
         ],
     });
 
@@ -556,19 +392,19 @@ const exportToCSV = async (clients: any[], res: Response): Promise<void> => {
         prenom: user.prenom,
         email: user.email,
         telephone: user.telephone,
-        adresse: user.adresse,
+        ville: user.ville,
+        codePostal: user.codePostal,
+        gouvernorat: user.gouvernorat,
     }));
 
     try {
         await csvWriter.writeRecords(records);
 
-        // Envoyer le fichier CSV en réponse
         res.download(filePath, 'clients.csv', (err) => {
             if (err) {
                 console.error('Erreur lors de l\'envoi du fichier CSV:', err);
                 res.status(500).json({ error: 'Erreur lors de l\'envoi du fichier CSV' });
             }
-            // Supprimer le fichier après l'envoi
             fs.unlinkSync(filePath);
         });
     } catch (err) {
@@ -585,7 +421,7 @@ const exportToPDF = async (clients: any[], res: Response): Promise<void> => {
     doc.fontSize(14).text('Liste des Clients', { align: 'center' });
     clients.forEach((user, index) => {
         doc.fontSize(12).text(`${index + 1}. ${user.nom} ${user.prenom} - ${user.email}`);
-        doc.fontSize(10).text(`Téléphone: ${user.telephone}, Adresse: ${user.adresse}`);
+        doc.fontSize(10).text(`Téléphone: ${user.telephone}, Ville: ${user.ville}`);
     });
 
     // Finaliser le PDF

@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,31 +8,27 @@ datasource db {
 }
 
 model Utilisateur {
-  id          Int      @id @default(autoincrement())
-  nom         String
-  prenom      String
-  email       String   @unique
-  telephone   String
-  adresse     String
-  motDePasse  String
-  role        String   @db.VarChar(10)
-  inscritLe   DateTime @default(now())
-  statut      String   @default("actif") // Assurez-vous que ce champ est présent
-  client      Client?
-  admin       Admin?
-  avis        Avis[]
-  notification Notification[]
-  chatbot     Chatbot?
-  messageInfo MessageInfo[]
-  resetTokens ResetToken[]
-}
+  id           Int          @id @default(autoincrement())
+  nom          String
+  prenom       String
+  email        String   @unique
+  telephone    String
+  ville        String   @default("") // Ensure this field exists
+  codePostal   String   @default("") // Ensure this field exists
+  gouvernorat  String   @default("") // Ensure this field exists
+  motDePasse   String
+  role         String   @db.VarChar(10)
+  inscritLe    DateTime @default(now())
+  statut       String   @default("actif")
 
-model ResetToken {
-  id            Int      @id @default(autoincrement())
-  token         String   @unique
-  utilisateur_id Int
-  utilisateur   Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
-  expiresAt     DateTime
+  client       Client?
+  admin        Admin?
+  avis         Avis[]
+  notification Notification[]
+  chatbot      Chatbot?
+  messageInfo  MessageInfo[]
+  resetTokens  ResetToken[]
+  messageries  Messagerie[]
 }
 
 model Client {
@@ -57,6 +47,7 @@ model Admin {
 
 model Avis {
   id            Int      @id @default(autoincrement())
+  date          DateTime
   note          Int
   commentaire   String?
   utilisateur   Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
@@ -67,7 +58,7 @@ model Notification {
   id            Int      @id @default(autoincrement())
   message       String
   dateEnvoi     DateTime @default(now())
-  statut        String   @db.VarChar(20) @default("non lu") // Statut de la notification (lu ou non lu)
+  statut        String   @db.VarChar(20) @default("non lu")
   utilisateur   Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
   utilisateur_id Int
 }
@@ -82,6 +73,7 @@ model Panier {
   id            Int      @id @default(autoincrement())
   date          DateTime
   total         Float    @default(0)
+  livrerDomicile Boolean @default(false)
   client        Client   @relation(fields: [client_id], references: [id], onDelete: Cascade)
   client_id     Int
   lignePanier   LignePanier[]
@@ -91,11 +83,10 @@ model Panier {
 model Produit {
   id            Int      @id @default(autoincrement())
   designation   String
-  description   String?
-  prixHT        Float
-  tva           Float
-  prixTTC       Float
-  stock         Int
+  qteStock      Int
+  prix          Float
+  nbrPoint      Int
+  seuilMin      Int
   deleted       Boolean  @default(false)
   lignePanier   LignePanier[]
 }
@@ -103,7 +94,7 @@ model Produit {
 model LignePanier {
   id            Int      @id @default(autoincrement())
   prix          Float
-  quantite      Int
+  qteCmd        Int
   sousTotal     Float
   panier        Panier   @relation(fields: [panier_id], references: [id], onDelete: Cascade)
   panier_id     Int
@@ -112,9 +103,14 @@ model LignePanier {
 }
 
 model Commande {
-  id            Int      @id @default(autoincrement())
-  total         Float
-  montantPaiement Float
+  id              Int      @id @default(autoincrement())
+  total           Float
+  remise         Float
+  montantPoint   Float
+  montantLivraison Float
+  montantAPayer  Float
+  dateLivraison  DateTime
+
   client        Client   @relation(fields: [client_id], references: [id], onDelete: Cascade)
   client_id     Int
   panier        Panier   @relation(fields: [panier_id], references: [id], onDelete: Cascade)
@@ -123,13 +119,13 @@ model Commande {
 }
 
 model Livraison {
-  id            Int      @id @default(autoincrement())
-  date          DateTime
-  nomLivreur    String
+  id              Int      @id @default(autoincrement())
+  date            DateTime
+  nomLivreur      String
   statutLivraison String @db.VarChar(50)
-  detailPaiement String
-  commande      Commande @relation(fields: [commande_id], references: [id], onDelete: Cascade)
-  commande_id   Int
+  detailPaiement  String
+  commande        Commande @relation(fields: [commande_id], references: [id], onDelete: Cascade)
+  commande_id     Int
 }
 
 model MessageInfo {
@@ -140,3 +136,18 @@ model MessageInfo {
   utilisateur_id Int
 }
 
+model Messagerie {
+  id             Int      @id @default(autoincrement())
+  contenu        String
+  date_envoi     DateTime @default(now())
+  utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  utilisateur_id Int
+}
+
+model ResetToken {
+  id            Int      @id @default(autoincrement())
+  token         String   @unique
+  utilisateur_id Int
+  utilisateur   Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  expiresAt     DateTime
+}
