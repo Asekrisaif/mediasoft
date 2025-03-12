@@ -1,8 +1,10 @@
+// src/models/Server.ts
 import express, { Application } from "express";
 import path from "path";
 import routesUser from '../routes/user.routes';
 import routesDefault from '../routes/default.routes';
 import routesProducto from '../routes/producto.routes';
+import routesMessagerie from '../routes/messagerie.routes'; // Importez les routes de messagerie
 
 class Server {
     private app: express.Application;
@@ -35,6 +37,7 @@ class Server {
         this.app.use('/', routesDefault); // Routes par défaut
         this.app.use('/api/users', routesUser); // Routes utilisateur
         this.app.use('/api/productos', routesProducto); // Routes produit
+        this.app.use('/api/messagerie', routesMessagerie); // Routes de messagerie
 
         // Route pour servir la page de réinitialisation du mot de passe
         this.app.get('/reset-password', (req, res) => {

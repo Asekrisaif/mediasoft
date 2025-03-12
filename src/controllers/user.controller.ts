@@ -450,6 +450,7 @@ const exportToPDF = async (clients: any[], res: Response): Promise<void> => {
         res.status(500).json({ error: 'Erreur lors de la génération du fichier PDF' });
     });
 };
+
 export const sendNotificationToAllClients = async (req: Request, res: Response): Promise<void> => {
     const { message } = req.body;
 
@@ -545,6 +546,237 @@ export const markNotificationAsRead = async (req: Request, res: Response): Promi
         } else {
             console.error('Erreur inconnue:', err);
             res.status(500).json({ error: 'Erreur inconnue lors de la mise à jour de la notification' });
+        }
+    }
+};
+
+export const getClientsWhoReadNotification = async (req: Request, res: Response): Promise<void> => {
+    const { message } = req.query;
+
+    console.log('Message reçu:', message); // Log pour déboguer
+
+    if (!message) {
+        res.status(400).json({ error: 'Le message de la notification est requis.' });
+        return;
+    }
+
+    try {
+        // Récupérer les notifications avec le statut "lu" pour le message spécifié
+        const readNotifications = await prisma.notification.findMany({
+            where: {
+                message: message as string,
+                statut: 'lu',
+            },
+            include: {
+                utilisateur: true, // Inclure les informations de l'utilisateur
+            },
+        });
+
+        // Extraire les utilisateurs qui ont lu la notification
+        const clientsWhoRead = readNotifications.map(notification => notification.utilisateur);
+
+        res.status(200).json({ clients: clientsWhoRead });
+    } catch (err) {
+        if (err instanceof Error) {
+            console.error('Erreur SQL:', err);
+            res.status(500).json({ error: 'Erreur lors de la récupération des clients', details: err.message });
+        } else {
+            console.error('Erreur inconnue:', err);
+            res.status(500).json({ error: 'Erreur inconnue lors de la récupération des clients' });
+        }
+    }
+};
+export const getClientsWhoDidNotReadNotification = async (req: Request, res: Response): Promise<void> => {
+    const { message } = req.query;
+
+    if (!message) {
+        res.status(400).json({ error: 'Le message de la notification est requis.' });
+        return;
+    }
+
+    try {
+        // Récupérer tous les clients
+        const allClients = await prisma.utilisateur.findMany({
+            where: {
+                role: 'client',
+            },
+        });
+
+        // Récupérer les notifications avec le statut "lu" pour le message spécifié
+        const readNotifications = await prisma.notification.findMany({
+            where: {
+                message: message as string,
+                statut: 'lu',
+            },
+            include: {
+                utilisateur: true, // Inclure les informations de l'utilisateur
+            },
+        });
+
+        // Extraire les IDs des utilisateurs qui ont lu la notification
+        const readClientIds = readNotifications.map(notification => notification.utilisateur.id);
+
+        // Filtrer les clients qui n'ont pas lu la notification
+        const clientsWhoDidNotRead = allClients.filter(client => !readClientIds.includes(client.id));
+
+        res.status(200).json({ clients: clientsWhoDidNotRead });
+    } catch (err) {
+        if (err instanceof Error) {
+            console.error('Erreur SQL:', err);
+            res.status(500).json({ error: 'Erreur lors de la récupération des clients', details: err.message });
+        } else {
+            console.error('Erreur inconnue:', err);
+            res.status(500).json({ error: 'Erreur inconnue lors de la récupération des clients' });
+        }
+    }
+};
+export const sendMessageToAdmin = async (req: Request, res: Response): Promise<void> => {
+    const { utilisateur_id, contenu } = req.body;
+
+    if (!utilisateur_id || !contenu) {
+        res.status(400).json({ error: 'L\'ID de l\'utilisateur et le contenu du message sont requis.' });
+        return;
+    }
+
+    try {
+        // Vérifier si l'utilisateur existe et est un client
+        const user = await prisma.utilisateur.findUnique({
+            where: { id: utilisateur_id },
+            include: { client: true },
+        });
+
+        if (!user || user.role !== 'client') {
+            res.status(404).json({ error: 'Utilisateur non trouvé ou non autorisé.' });
+            return;
+        }
+
+        // Enregistrer le message dans la table Messagerie
+        const message = await prisma.messagerie.create({
+            data: {
+                contenu,
+                date_envoi: new Date(),
+                utilisateur_id,
+            },
+        });
+
+        res.status(201).json({ message: 'Message envoyé avec succès', data: message });
+    } catch (err) {
+        if (err instanceof Error) {
+            console.error('Erreur SQL:', err);
+            res.status(500).json({ error: 'Erreur lors de l\'envoi du message', details: err.message });
+        } else {
+            console.error('Erreur inconnue:', err);
+            res.status(500).json({ error: 'Erreur inconnue lors de l\'envoi du message' });
+        }
+    }
+};
+export const replyToClientMessage = async (req: Request, res: Response): Promise<void> => {
+    const { message_id, admin_id, contenu } = req.body;
+
+    if (!message_id || !admin_id || !contenu) {
+        res.status(400).json({ error: 'L\'ID du message, l\'ID de l\'administrateur et le contenu de la réponse sont requis.' });
+        return;
+    }
+
+    try {
+        // Vérifier si l'administrateur existe
+        const admin = await prisma.utilisateur.findUnique({
+            where: { id: admin_id },
+            include: { admin: true },
+        });
+
+        if (!admin || admin.role !== 'admin') {
+            res.status(404).json({ error: 'Administrateur non trouvé ou non autorisé.' });
+            return;
+        }
+
+        // Vérifier si le message existe
+        const originalMessage = await prisma.messagerie.findUnique({
+            where: { id: message_id },
+        });
+
+        if (!originalMessage) {
+            res.status(404).json({ error: 'Message non trouvé.' });
+            return;
+        }
+
+        // Enregistrer la réponse dans la table Messagerie
+        const replyMessage = await prisma.messagerie.create({
+            data: {
+                contenu,
+                date_envoi: new Date(),
+                utilisateur_id: admin_id,
+                parent_message_id: message_id, // Lier la réponse au message original
+            },
+        });
+
+        res.status(201).json({ message: 'Réponse envoyée avec succès', data: replyMessage });
+    } catch (err) {
+        if (err instanceof Error) {
+            console.error('Erreur SQL:', err);
+            res.status(500).json({ error: 'Erreur lors de l\'envoi de la réponse', details: err.message });
+        } else {
+            console.error('Erreur inconnue:', err);
+            res.status(500).json({ error: 'Erreur inconnue lors de l\'envoi de la réponse' });
+        }
+    }
+};
+export const getClientMessages = async (req: Request, res: Response): Promise<void> => {
+    const { utilisateur_id } = req.params;
+
+    if (!utilisateur_id || isNaN(Number(utilisateur_id))) {
+        res.status(400).json({ error: 'ID de l\'utilisateur invalide ou manquant.' });
+        return;
+    }
+
+    try {
+        // Récupérer tous les messages du client (messages envoyés et réponses)
+        const messages = await prisma.messagerie.findMany({
+            where: {
+                OR: [
+                    { utilisateur_id: Number(utilisateur_id) }, // Messages envoyés par le client
+                    { parent_message_id: { not: null }, utilisateur: { role: 'admin' } }, // Réponses de l'admin
+                ],
+            },
+            include: {
+                utilisateur: true, // Inclure les détails de l'utilisateur (client ou admin)
+            },
+            orderBy: {
+                date_envoi: 'asc', // Trier par date d'envoi
+            },
+        });
+
+        res.status(200).json({ messages });
+    } catch (err) {
+        if (err instanceof Error) {
+            console.error('Erreur SQL:', err);
+            res.status(500).json({ error: 'Erreur lors de la récupération des messages', details: err.message });
+        } else {
+            console.error('Erreur inconnue:', err);
+            res.status(500).json({ error: 'Erreur inconnue lors de la récupération des messages' });
+        }
+    }
+};
+export const getAllMessagesForAdmin = async (req: Request, res: Response): Promise<void> => {
+    try {
+        // Récupérer tous les messages (messages clients et réponses admin)
+        const messages = await prisma.messagerie.findMany({
+            include: {
+                utilisateur: true, // Inclure les détails de l'utilisateur (client ou admin)
+            },
+            orderBy: {
+                date_envoi: 'asc', // Trier par date d'envoi
+            },
+        });
+
+        res.status(200).json({ messages });
+    } catch (err) {
+        if (err instanceof Error) {
+            console.error('Erreur SQL:', err);
+            res.status(500).json({ error: 'Erreur lors de la récupération des messages', details: err.message });
+        } else {
+            console.error('Erreur inconnue:', err);
+            res.status(500).json({ error: 'Erreur inconnue lors de la récupération des messages' });
         }
     }
 };

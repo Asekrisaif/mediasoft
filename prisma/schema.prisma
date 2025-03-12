@@ -26,7 +26,6 @@ model Utilisateur {
   avis         Avis[]
   notification Notification[]
   chatbot      Chatbot?
-  messageInfo  MessageInfo[]
   resetTokens  ResetToken[]
   messageries  Messagerie[]
 }
@@ -127,21 +126,15 @@ model Livraison {
   commande        Commande @relation(fields: [commande_id], references: [id], onDelete: Cascade)
   commande_id     Int
 }
-
-model MessageInfo {
-  id            Int      @id @default(autoincrement())
-  contenu       String
-  dateEnvoi     DateTime
-  utilisateur   Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
-  utilisateur_id Int
-}
-
 model Messagerie {
-  id             Int      @id @default(autoincrement())
+  id             Int        @id @default(autoincrement())
   contenu        String
-  date_envoi     DateTime @default(now())
+  date_envoi     DateTime   @default(now())
   utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
   utilisateur_id Int
+  parent_message_id Int?    // Lier la réponse au message original
+  parentMessage  Messagerie? @relation("ParentMessage", fields: [parent_message_id], references: [id])
+  replies        Messagerie[] @relation("ParentMessage") // Réponses liées à ce message
 }
 
 model ResetToken {
