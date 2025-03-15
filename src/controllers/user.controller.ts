@@ -780,3 +780,140 @@ export const getAllMessagesForAdmin = async (req: Request, res: Response): Promi
         }
     }
 };
+const exportClientsToCSV = async (clientsWhoRead: any[], clientsWhoDidNotRead: any[], res: Response): Promise<void> => {
+    const filePath = path.join(__dirname, 'clients_notification_status.csv');
+    const csvWriter = createObjectCsvWriter({
+        path: filePath,
+        header: [
+            { id: 'id', title: 'ID' },
+            { id: 'nom', title: 'Nom' },
+            { id: 'prenom', title: 'Prénom' },
+            { id: 'email', title: 'Email' },
+            { id: 'statut', title: 'Statut' }, // Statut de la notification (lu ou non lu)
+        ],
+    });
+
+    // Combiner les deux listes avec un statut
+    const records = [
+        ...clientsWhoRead.map(client => ({
+            id: client.id,
+            nom: client.nom,
+            prenom: client.prenom,
+            email: client.email,
+            statut: 'lu',
+        })),
+        ...clientsWhoDidNotRead.map(client => ({
+            id: client.id,
+            nom: client.nom,
+            prenom: client.prenom,
+            email: client.email,
+            statut: 'non lu',
+        })),
+    ];
+
+    try {
+        await csvWriter.writeRecords(records);
+
+        res.download(filePath, 'clients_notification_status.csv', (err) => {
+            if (err) {
+                console.error('Erreur lors de l\'envoi du fichier CSV:', err);
+                res.status(500).json({ error: 'Erreur lors de l\'envoi du fichier CSV' });
+            }
+            fs.unlinkSync(filePath); // Supprimer le fichier après l'envoi
+        });
+    } catch (err) {
+        console.error('Erreur lors de la génération du fichier CSV:', err);
+        res.status(500).json({ error: 'Erreur lors de la génération du fichier CSV' });
+    }
+};
+const exportClientsToPDF = async (clientsWhoRead: any[], clientsWhoDidNotRead: any[], res: Response): Promise<void> => {
+    const filePath = path.join(__dirname, 'clients_notification_status.pdf');
+    const doc = new PDFDocument();
+
+    // Écrire le titre
+    doc.fontSize(14).text('Statut des notifications', { align: 'center' });
+
+    // Écrire la section des clients qui ont lu la notification
+    doc.fontSize(12).text('Clients ayant lu la notification:', { underline: true });
+    clientsWhoRead.forEach((client, index) => {
+        doc.fontSize(10).text(`${index + 1}. ${client.nom} ${client.prenom} - ${client.email}`);
+    });
+
+    // Ajouter un espace
+    doc.moveDown();
+
+    // Écrire la section des clients qui n'ont pas lu la notification
+    doc.fontSize(12).text('Clients n\'ayant pas lu la notification:', { underline: true });
+    clientsWhoDidNotRead.forEach((client, index) => {
+        doc.fontSize(10).text(`${index + 1}. ${client.nom} ${client.prenom} - ${client.email}`);
+    });
+
+    // Finaliser le PDF
+    const writeStream = fs.createWriteStream(filePath);
+    doc.pipe(writeStream);
+    doc.end();
+
+    // Attendre que le fichier soit entièrement écrit
+    writeStream.on('finish', () => {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename="clients_notification_status.pdf"');
+
+        const readStream = fs.createReadStream(filePath);
+        readStream.pipe(res);
+
+        // Supprimer le fichier après l'envoi
+        readStream.on('end', () => {
+            fs.unlinkSync(filePath);
+        });
+    });
+
+    writeStream.on('error', (err) => {
+        console.error('Erreur lors de la génération du fichier PDF:', err);
+        res.status(500).json({ error: 'Erreur lors de la génération du fichier PDF' });
+    });
+};
+export const exportNotificationStatus = async (req: Request, res: Response): Promise<void> => {
+    const { message, format } = req.query;
+
+    if (!message || !format) {
+        res.status(400).json({ error: 'Le message de la notification et le format sont requis.' });
+        return;
+    }
+
+    try {
+        // Récupérer les clients qui ont lu la notification
+        const readNotifications = await prisma.notification.findMany({
+            where: {
+                message: message as string,
+                statut: 'lu',
+            },
+            include: {
+                utilisateur: true,
+            },
+        });
+        const clientsWhoRead = readNotifications.map(notification => notification.utilisateur);
+
+        // Récupérer tous les clients
+        const allClients = await prisma.utilisateur.findMany({
+            where: {
+                role: 'client',
+            },
+        });
+
+        // Filtrer les clients qui n'ont pas lu la notification
+        const readClientIds = clientsWhoRead.map(client => client.id);
+        const clientsWhoDidNotRead = allClients.filter(client => !readClientIds.includes(client.id));
+
+        // Exporter en fonction du format demandé
+        if (format === 'csv') {
+            await exportClientsToCSV(clientsWhoRead, clientsWhoDidNotRead, res);
+        } else if (format === 'pdf') {
+            await exportClientsToPDF(clientsWhoRead, clientsWhoDidNotRead, res);
+        } else {
+            res.status(400).json({ error: 'Format non supporté. Utilisez "csv" ou "pdf".' });
+        }
+    } catch (err) {
+        console.error('Erreur lors de l\'exportation des données:', err);
+        res.status(500).json({ error: 'Erreur lors de l\'exportation des données', details: err instanceof Error ? err.message : 'Erreur inconnue' });
+    }
+};

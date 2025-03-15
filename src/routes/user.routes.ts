@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { addUser, checkUser, getUsers, getUserById, updateUser, searchUsers, resetPassword,
      verifyResetToken, forgotPassword, unblockUser, blockUser, exportUsers, sendNotificationToAllClients,
-     markNotificationAsRead,getClientsWhoDidNotReadNotification,getClientsWhoReadNotification
+     markNotificationAsRead,getClientsWhoDidNotReadNotification,getClientsWhoReadNotification,exportNotificationStatus
 } from '../controllers/user.controller';
 
 const router = Router();
 
+router.get('/export-notification-status', exportNotificationStatus); // Définir avant les routes génériques
 router.get('/all', getUsers); // Route pour récupérer tous les utilisateurs
 router.post('/add', addUser); // Route pour ajouter un utilisateur
 router.post('/check', checkUser); // Route pour vérifier un utilisateur
