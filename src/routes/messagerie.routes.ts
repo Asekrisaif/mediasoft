@@ -5,7 +5,7 @@ import {
     replyToClientMessage,
     getClientMessages,
     getAllMessagesForAdmin
-} from '../controllers/user.controller'; // Assurez-vous que le chemin est correct
+} from '../controllers/messagerie.controller'; // Assurez-vous que le chemin est correct
 
 const router = Router();
 

@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import { addUser, checkUser, getUsers, getUserById, updateUser, searchUsers, resetPassword,
-     verifyResetToken, forgotPassword, unblockUser, blockUser, exportUsers, sendNotificationToAllClients,
-     markNotificationAsRead,getClientsWhoDidNotReadNotification,getClientsWhoReadNotification,exportNotificationStatus
+     verifyResetToken, forgotPassword, unblockUser, blockUser, exportUsers
 } from '../controllers/user.controller';
 
 const router = Router();
 
-router.get('/export-notification-status', exportNotificationStatus); // Définir avant les routes génériques
+
 router.get('/all', getUsers); // Route pour récupérer tous les utilisateurs
 router.post('/add', addUser); // Route pour ajouter un utilisateur
 router.post('/check', checkUser); // Route pour vérifier un utilisateur
@@ -19,8 +18,5 @@ router.post('/forgot-password', forgotPassword); // Route pour demander la réin
 router.put('/block/:id', blockUser); // Route pour bloquer un utilisateur
 router.put('/unblock/:id', unblockUser); // Route pour débloquer un utilisateur
 router.get('/export/:format', exportUsers); // Route pour exporter les utilisateurs
-router.post('/notifications/send-to-all-clients', sendNotificationToAllClients);// Route pour envoyer une notification à tous les clients
-router.put('/notifications/:notificationId/mark-as-read', markNotificationAsRead);// Route pour marquer une notification comme lue
-router.get('/notifications/read', getClientsWhoReadNotification)// Route pour récupérer les clients qui ont lu la notification
-router.get('/notifications/unread', getClientsWhoDidNotReadNotification);// Route pour récupérer les clients qui n'ont pas lu la notification
+
 export default router;
