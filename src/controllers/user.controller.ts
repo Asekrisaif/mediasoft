@@ -1,11 +1,6 @@
 import { Request, Response } from "express";
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
-import nodemailer from 'nodemailer';
-import { createObjectCsvWriter } from 'csv-writer';
-import PDFDocument from 'pdfkit';
-import fs from 'fs';
-import path from 'path';
 
 const prisma = new PrismaClient();
 
@@ -37,19 +32,19 @@ export const addUser = async (req: Request, res: Response): Promise<void> => {
     }
 
     try {
-        const hashedPassword = await bcrypt.hash(motDePasse, 10);
+        const hashedPassword = await bcrypt.hash(motDePasse, 10); // Hachage du mot de passe
         const newUser = await prisma.utilisateur.create({
             data: {
                 nom,
                 prenom,
                 email,
                 telephone,
-                motDePasse: hashedPassword,
+                motDePasse: hashedPassword, // Stockage du mot de passe haché
                 role,
                 inscritLe: new Date(),
-                ville, // Ensure this field is recognized
-                codePostal, // Ensure this field is recognized
-                gouvernorat // Ensure this field is recognized
+                ville,
+                codePostal,
+                gouvernorat
             }
         });
         res.status(201).json({ message: 'Utilisateur ajouté avec succès', user: newUser });
@@ -165,289 +160,5 @@ export const searchUsers = async (req: Request, res: Response): Promise<void> =>
     }
 };
 
-// Fonction pour envoyer un email
-const sendResetEmail = async (email: string, resetLink: string): Promise<void> => {
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASSWORD
-        }
-    });
 
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: 'Réinitialisation de votre mot de passe',
-        text: `Cliquez sur ce lien pour réinitialiser votre mot de passe: ${resetLink}`
-    };
-
-    await transporter.sendMail(mailOptions);
-};
-
-export const resetPassword = async (req: Request, res: Response): Promise<void> => {
-    const { email } = req.body;
-
-    if (!email) {
-        res.status(400).json({ error: 'L\'email est requis.' });
-        return;
-    }
-
-    try {
-        const user = await prisma.utilisateur.findUnique({ where: { email } });
-
-        if (!user) {
-            res.status(404).json({ error: 'Utilisateur non trouvé.' });
-            return;
-        }
-
-        const resetToken = generateResetToken();
-        const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`;
-
-        await prisma.resetToken.create({
-            data: {
-                token: resetToken,
-                utilisateur_id: user.id,
-                expiresAt: new Date(Date.now() + 3600000)
-            }
-        });
-
-        await sendResetEmail(email, resetLink);
-
-        res.status(200).json({ message: 'Un lien de réinitialisation a été envoyé à votre adresse email.' });
-    } catch (err) {
-        console.error('Erreur lors de la réinitialisation du mot de passe:', err);
-        res.status(500).json({ error: 'Erreur lors de la réinitialisation du mot de passe', details: err instanceof Error ? err.message : 'Erreur inconnue' });
-    }
-};
-
-export const verifyResetToken = async (req: Request, res: Response): Promise<void> => {
-    const { token, newPassword } = req.body;
-
-    if (!token || !newPassword) {
-        res.status(400).json({ error: 'Le token et le nouveau mot de passe sont requis.' });
-        return;
-    }
-
-    try {
-        const resetToken = await prisma.resetToken.findFirst({
-            where: { token, expiresAt: { gt: new Date() } }
-        });
-
-        if (!resetToken) {
-            res.status(400).json({ error: 'Token invalide ou expiré.' });
-            return;
-        }
-
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-        await prisma.utilisateur.update({
-            where: { id: resetToken.utilisateur_id },
-            data: { motDePasse: hashedPassword }
-        });
-
-        await prisma.resetToken.delete({ where: { id: resetToken.id } });
-
-        res.status(200).json({ message: 'Mot de passe mis à jour avec succès.' });
-    } catch (err) {
-        console.error('Erreur lors de la vérification du token:', err);
-        res.status(500).json({ error: 'Erreur lors de la vérification du token', details: err instanceof Error ? err.message : 'Erreur inconnue' });
-    }
-};
-
-export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
-    const { email } = req.body;
-
-    if (!email) {
-        res.status(400).json({ error: 'L\'email est requis.' });
-        return;
-    }
-
-    try {
-        const user = await prisma.utilisateur.findUnique({ where: { email } });
-
-        if (!user) {
-            res.status(404).json({ error: 'Aucun utilisateur trouvé avec cet email.' });
-            return;
-        }
-
-        const resetToken = generateResetToken();
-        const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`;
-
-        await prisma.resetToken.create({
-            data: {
-                token: resetToken,
-                utilisateur_id: user.id,
-                expiresAt: new Date(Date.now() + 3600000)
-            }
-        });
-
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASSWORD
-            }
-        });
-
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: 'Réinitialisation de votre mot de passe',
-            text: `Cliquez sur ce lien pour réinitialiser votre mot de passe: ${resetLink}`
-        };
-
-        await transporter.sendMail(mailOptions);
-
-        res.status(200).json({ message: 'Un lien de réinitialisation a été envoyé à votre adresse email.' });
-    } catch (err) {
-        console.error('Erreur lors de l\'envoi de l\'email:', err);
-        res.status(500).json({ error: 'Erreur lors de l\'envoi de l\'email', details: err instanceof Error ? err.message : 'Erreur inconnue' });
-    }
-};
-
-export const blockUser = async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
-
-    if (!id || isNaN(Number(id))) {
-        res.status(400).json({ error: 'ID invalide ou manquant.' });
-        return;
-    }
-
-    try {
-        const updatedUser = await prisma.utilisateur.update({
-            where: { id: Number(id) },
-            data: { statut: 'bloqué' }
-        });
-
-        res.status(200).json({ message: 'Utilisateur bloqué avec succès', user: updatedUser });
-    } catch (err) {
-        console.error('Erreur SQL:', err);
-        res.status(500).json({ error: 'Erreur lors du blocage de l\'utilisateur', details: err instanceof Error ? err.message : 'Erreur inconnue' });
-    }
-};
-
-export const unblockUser = async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
-
-    if (!id || isNaN(Number(id))) {
-        res.status(400).json({ error: 'ID invalide ou manquant.' });
-        return;
-    }
-
-    try {
-        const updatedUser = await prisma.utilisateur.update({
-            where: { id: Number(id) },
-            data: { statut: 'actif' }
-        });
-
-        res.status(200).json({ message: 'Utilisateur débloqué avec succès', user: updatedUser });
-    } catch (err) {
-        console.error('Erreur SQL:', err);
-        res.status(500).json({ error: 'Erreur lors du déblocage de l\'utilisateur', details: err instanceof Error ? err.message : 'Erreur inconnue' });
-    }
-};
-
-export const exportUsers = async (req: Request, res: Response): Promise<void> => {
-    const { format } = req.params;
-
-    try {
-        const clients = await prisma.utilisateur.findMany({
-            where: { role: 'client' },
-            include: { client: true }
-        });
-
-        if (format === 'csv') {
-            await exportToCSV(clients, res);
-        } else if (format === 'pdf') {
-            await exportToPDF(clients, res);
-        } else {
-            res.status(400).json({ error: 'Format non supporté. Utilisez "csv" ou "pdf".' });
-        }
-    } catch (err) {
-        console.error('Erreur lors de l\'exportation des utilisateurs:', err);
-        res.status(500).json({ error: 'Erreur lors de l\'exportation des utilisateurs', details: err instanceof Error ? err.message : 'Erreur inconnue' });
-    }
-};
-
-const exportToCSV = async (clients: any[], res: Response): Promise<void> => {
-    const filePath = path.join(__dirname, 'export.csv');
-    const csvWriter = createObjectCsvWriter({
-        path: filePath,
-        header: [
-            { id: 'id', title: 'ID' },
-            { id: 'nom', title: 'Nom' },
-            { id: 'prenom', title: 'Prénom' },
-            { id: 'email', title: 'Email' },
-            { id: 'telephone', title: 'Téléphone' },
-            { id: 'ville', title: 'Ville' },
-            { id: 'codePostal', title: 'Code Postal' },
-            { id: 'gouvernorat', title: 'Gouvernorat' },
-        ],
-    });
-
-    const records = clients.map(user => ({
-        id: user.id,
-        nom: user.nom,
-        prenom: user.prenom,
-        email: user.email,
-        telephone: user.telephone,
-        ville: user.ville,
-        codePostal: user.codePostal,
-        gouvernorat: user.gouvernorat,
-    }));
-
-    try {
-        await csvWriter.writeRecords(records);
-
-        res.download(filePath, 'clients.csv', (err) => {
-            if (err) {
-                console.error('Erreur lors de l\'envoi du fichier CSV:', err);
-                res.status(500).json({ error: 'Erreur lors de l\'envoi du fichier CSV' });
-            }
-            fs.unlinkSync(filePath);
-        });
-    } catch (err) {
-        console.error('Erreur lors de la génération du fichier CSV:', err);
-        res.status(500).json({ error: 'Erreur lors de la génération du fichier CSV' });
-    }
-};
-// Fonction pour exporter en PDF
-const exportToPDF = async (clients: any[], res: Response): Promise<void> => {
-    const filePath = path.join(__dirname, 'export.pdf'); // Chemin du fichier PDF
-    const doc = new PDFDocument();
-
-    // Écrire les clients
-    doc.fontSize(14).text('Liste des Clients', { align: 'center' });
-    clients.forEach((user, index) => {
-        doc.fontSize(12).text(`${index + 1}. ${user.nom} ${user.prenom} - ${user.email}`);
-        doc.fontSize(10).text(`Téléphone: ${user.telephone}, Ville: ${user.ville}`);
-    });
-
-    // Finaliser le PDF
-    const writeStream = fs.createWriteStream(filePath);
-    doc.pipe(writeStream);
-    doc.end();
-
-    // Attendre que le fichier soit entièrement écrit
-    writeStream.on('finish', () => {
-        // Définir les en-têtes de réponse
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="clients.pdf"');
-
-        // Envoyer le fichier PDF en réponse
-        const readStream = fs.createReadStream(filePath);
-        readStream.pipe(res);
-
-        // Supprimer le fichier après l'envoi
-        readStream.on('end', () => {
-            fs.unlinkSync(filePath);
-        });
-    });
-
-    writeStream.on('error', (err) => {
-        console.error('Erreur lors de la génération du fichier PDF:', err);
-        res.status(500).json({ error: 'Erreur lors de la génération du fichier PDF' });
-    });
-};
 

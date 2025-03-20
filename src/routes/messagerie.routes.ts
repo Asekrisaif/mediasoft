@@ -1,11 +1,13 @@
-// src/routes/messagerie.routes.ts
 import { Router } from 'express';
 import {
     sendMessageToAdmin,
     replyToClientMessage,
     getClientMessages,
-    getAllMessagesForAdmin
-} from '../controllers/messagerie.controller'; // Assurez-vous que le chemin est correct
+    getAllMessagesForAdmin,
+    exportClientMessagesToCSV,
+    exportClientMessagesToPDF,
+    getAdminReplies,
+} from '../controllers/messagerie.controller';
 
 const router = Router();
 
@@ -20,5 +22,14 @@ router.get('/client-messages/:utilisateur_id', getClientMessages);
 
 // Route pour récupérer tous les messages (admin seulement)
 router.get('/all-messages', getAllMessagesForAdmin);
+
+// Route pour exporter les messages en CSV
+router.get('/export-csv', exportClientMessagesToCSV);
+
+// Route pour exporter les messages en PDF
+router.get('/export-pdf', exportClientMessagesToPDF);
+
+// Route pour récupérer les réponses de l'admin
+router.get('/admin-replies', getAdminReplies);
 
 export default router;

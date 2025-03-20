@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Produits à faible stock</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Produits à faible stock</h1>
+    <table id="low-stock-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Désignation</th>
+                <th>Stock actuel</th>
+                <th>Seuil minimum</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Les lignes seront ajoutées dynamiquement ici -->
+        </tbody>
+    </table>
+
+    <script>
+        // Récupérer les produits à faible stock depuis l'API
+        fetch('http://localhost:3000/api/produit/admin/produits-faibles')
+            .then(response => response.json())
+            .then(data => {
+                const tableBody = document.querySelector('#low-stock-table tbody');
+                if (data.produits && data.produits.length > 0) {
+                    data.produits.forEach(produit => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${produit.id}</td>
+                            <td>${produit.designation}</td>
+                            <td>${produit.qteStock}</td>
+                            <td>${produit.seuilMin}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                } else {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td colspan="4">Aucun produit à faible stock trouvé.</td>`;
+                    tableBody.appendChild(row);
+                }
+            })
+            .catch(error => console.error('Erreur:', error));
+    </script>
+</body>
+</html>
