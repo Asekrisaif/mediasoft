@@ -5,13 +5,13 @@ import { notifyAdminLowStock } from '../utils/notifyAdmin'; // Assurez-vous que 
 const prisma = new PrismaClient();
 
 export const validatePanierAndCreateCommande = async (req: Request, res: Response): Promise<void> => {
-    const { panier_id } = req.body;
+    const { panier_id, utiliserPoints } = req.body; // Ajouter `utiliserPoints` pour savoir si le client veut utiliser ses points
 
     try {
         // Vérifier si le panier existe
         const panier = await prisma.panier.findUnique({
             where: { id: panier_id },
-            include: { lignePanier: true },
+            include: { lignePanier: { include: { produit: true } }, client: true },
         });
 
         if (!panier) {
@@ -25,11 +25,10 @@ export const validatePanierAndCreateCommande = async (req: Request, res: Respons
             return;
         }
 
-        // Mettre à jour le stock des produits
+        // Mettre à jour le stock des produits et calculer le total des points
+        let totalPoints = 0;
         for (const ligne of panier.lignePanier) {
-            const produit = await prisma.produit.findUnique({
-                where: { id: ligne.produit_id },
-            });
+            const produit = ligne.produit;
 
             if (!produit) {
                 res.status(404).json({ error: `Produit avec ID ${ligne.produit_id} non trouvé.` });
@@ -48,10 +47,47 @@ export const validatePanierAndCreateCommande = async (req: Request, res: Respons
                 data: { qteStock: newStock },
             });
 
-            // Vérifier si le stock est inférieur ou égal au seuil minimum
-            if (newStock <= produit.seuilMin) {
-                await notifyAdminLowStock(produit); // Envoyer une notification aux admins
-            }
+            // Ajouter les points du produit au total des points
+            totalPoints += produit.nbrPoint * ligne.qteCmd;
+        }
+
+        // Mettre à jour le solde de points du client
+        const updatedClient = await prisma.client.update({
+            where: { id: panier.client_id },
+            data: {
+                soldePoints: {
+                    increment: totalPoints, // Ajouter les points au solde existant
+                },
+            },
+        });
+
+        // Enregistrer l'achat dans l'historique des achats
+        const historiqueAchat = panier.lignePanier.map((ligne) => ({
+            produit: ligne.produit.designation,
+            quantite: ligne.qteCmd,
+            prixUnitaire: ligne.prix,
+            sousTotal: ligne.sousTotal,
+        }));
+
+        await prisma.client.update({
+            where: { id: panier.client_id },
+            data: {
+                historiqueAchats: JSON.stringify(historiqueAchat), // Convertir en JSON pour stocker
+            },
+        });
+
+        // Appliquer une réduction si le client utilise ses points
+        let remise = 0;
+        if (utiliserPoints && updatedClient.soldePoints >= 100) { // Exemple : 100 points = 10% de réduction
+            remise = panier.total * 0.1; // 10% de réduction
+            await prisma.client.update({
+                where: { id: panier.client_id },
+                data: {
+                    soldePoints: {
+                        decrement: 100, // Dépenser 100 points
+                    },
+                },
+            });
         }
 
         // Créer la commande
@@ -59,16 +95,24 @@ export const validatePanierAndCreateCommande = async (req: Request, res: Respons
             data: {
                 client_id: panier.client_id,
                 panier_id: panier.id,
-                total: panier.total,
-                remise: 0, // Valeur par défaut ou calculée
-                montantPoint: 0, // Valeur par défaut ou calculée
+                total: panier.total - remise, // Appliquer la réduction
+                remise,
+                montantPoint: totalPoints,
                 montantLivraison: 0, // Valeur par défaut ou calculée
-                montantAPayer: panier.total, // Valeur par défaut ou calculée
+                montantAPayer: panier.total - remise, // Total après réduction
                 dateLivraison: new Date(), // Date de livraison par défaut
             },
         });
 
-        res.status(201).json({ message: 'Commande créée avec succès', data: commande });
+        res.status(201).json({
+            message: 'Commande créée avec succès',
+            data: {
+                commande,
+                pointsGagnes: totalPoints,
+                remiseAppliquee: remise,
+                nouveauSoldePoints: updatedClient.soldePoints,
+            },
+        });
     } catch (err) {
         if (err instanceof Error) {
             console.error('Erreur SQL:', err);
