@@ -1,0 +1,8 @@
+Client ID,Client Nom,Client Email,Message ID,Message Contenu,Message Date,Reply ID,Reply Contenu,Reply Date,Admin Nom
+1,Doe,jane.doe@example.com,1,"Bonjour, j'ai un problème avec ma commande.",Wed Mar 12 2025 17:54:43 GMT+0100 (heure normale d’Afrique de l’Ouest),,,,
+1,Doe,jane.doe@example.com,1,"Bonjour, j'ai un problème avec ma commande.",Wed Mar 12 2025 17:54:43 GMT+0100 (heure normale d’Afrique de l’Ouest),3,"Bonjour, nous allons vérifier votre commande.",Wed Mar 12 2025 17:56:10 GMT+0100 (heure normale d’Afrique de l’Ouest),asekri
+1,Doe,jane.doe@example.com,1,"Bonjour, j'ai un problème avec ma commande.",Wed Mar 12 2025 17:54:43 GMT+0100 (heure normale d’Afrique de l’Ouest),5,"Bonjour, comment puis-je vous aider ?",Sun Mar 16 2025 04:01:55 GMT+0100 (heure normale d’Afrique de l’Ouest),asekri
+1,Doe,jane.doe@example.com,1,"Bonjour, j'ai un problème avec ma commande.",Wed Mar 12 2025 17:54:43 GMT+0100 (heure normale d’Afrique de l’Ouest),7,Nous allons vérifier votre commande.,Sun Mar 16 2025 05:28:01 GMT+0100 (heure normale d’Afrique de l’Ouest),asekri
+1,Doe,jane.doe@example.com,4,"Bonjour, j'ai besoin d'aide.",Sun Mar 16 2025 04:01:09 GMT+0100 (heure normale d’Afrique de l’Ouest),,,,
+1,Doe,jane.doe@example.com,6,"Bonjour, j'ai un problème avec ma commande.",Sun Mar 16 2025 05:25:01 GMT+0100 (heure normale d’Afrique de l’Ouest),,,,
+3,asekri,saifasekri20@gmail.com,2,"Bonjour, j'ai un problème avec ma commande.",Wed Mar 12 2025 17:55:19 GMT+0100 (heure normale d’Afrique de l’Ouest),,,,
