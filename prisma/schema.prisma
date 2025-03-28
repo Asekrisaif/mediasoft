@@ -45,12 +45,15 @@ model Admin {
 }
 
 model Avis {
-  id            Int      @id @default(autoincrement())
-  date          DateTime
+  id            Int       @id @default(autoincrement())
+  date          DateTime  @default(now())
   note          Int
   commentaire   String?
   utilisateur   Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
   utilisateur_id Int
+  produit       Produit?   @relation(fields: [produit_id], references: [id])
+  produit_id    Int?
+  @@unique([utilisateur_id, produit_id], name: "utilisateur_id_produit_id")
 }
 
 model Notification {
@@ -81,7 +84,7 @@ model Panier {
 
 model Produit {
   id            Int      @id @default(autoincrement())
-  designation   String   @default("Désignation par défaut") // Modification ici
+  designation   String   @default("Désignation par défaut")
   description   String?
   images        String[]
   qteStock      Int
@@ -90,6 +93,7 @@ model Produit {
   seuilMin      Int
   deleted       Boolean  @default(false)
   lignePanier   LignePanier[]
+  avis          Avis[]    // Ajoutez cette ligne pour la relation inverse
 }
 
 model LignePanier {
