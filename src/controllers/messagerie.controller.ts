@@ -1,9 +1,15 @@
 import { Request, Response } from "express";
 import { PrismaClient } from '@prisma/client';
-import { createObjectCsvWriter } from 'csv-writer'; // Import pour CSV
-import PDFDocument from 'pdfkit'; // Import pour PDF
+import { createObjectCsvWriter } from 'csv-writer';
+import PDFDocument from 'pdfkit';
+import { Server } from 'socket.io';
 
 const prisma = new PrismaClient();
+let io: Server;
+
+export const initSocket = (socketIo: Server) => {
+    io = socketIo;
+};
 
 export const sendMessageToAdmin = async (req: Request, res: Response): Promise<void> => {
     const { utilisateur_id, contenu } = req.body;
@@ -32,17 +38,15 @@ export const sendMessageToAdmin = async (req: Request, res: Response): Promise<v
             },
         });
 
+        // Émettre le nouveau message à tous les admins
+        io.emit('new_message_admin', message);
+
         res.status(201).json({ message: 'Message envoyé avec succès', data: message });
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors de l\'envoi du message', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de l\'envoi du message' });
-        }
+        handleError(res, err, 'Erreur lors de l\'envoi du message');
     }
 };
+
 
 export const replyToClientMessage = async (req: Request, res: Response): Promise<void> => {
     const { message_id, admin_id, contenu } = req.body;
@@ -81,17 +85,15 @@ export const replyToClientMessage = async (req: Request, res: Response): Promise
             },
         });
 
+        // Émettre la réponse uniquement au client concerné
+        io.to(`user_${originalMessage.utilisateur_id}`).emit('new_message_client', replyMessage);
+
         res.status(201).json({ message: 'Réponse envoyée avec succès', data: replyMessage });
     } catch (err) {
-        if (err instanceof Error) {
-            console.error('Erreur SQL:', err);
-            res.status(500).json({ error: 'Erreur lors de l\'envoi de la réponse', details: err.message });
-        } else {
-            console.error('Erreur inconnue:', err);
-            res.status(500).json({ error: 'Erreur inconnue lors de l\'envoi de la réponse' });
-        }
+        handleError(res, err, 'Erreur lors de l\'envoi de la réponse');
     }
 };
+
 
 export const getClientMessages = async (req: Request, res: Response): Promise<void> => {
     const { utilisateur_id } = req.params;
@@ -324,10 +326,9 @@ export const exportClientMessagesToPDF = async (req: Request, res: Response): Pr
 
 // Fonction pour dessiner un tableau dans le PDF
 const drawTable = (doc: PDFKit.PDFDocument, table: { headers: string[]; rows: string[][] }) => {
-    const columnWidths = [100, 200, 150, 150]; // Largeurs des colonnes
+    const columnWidths = [100, 200, 150, 150];
     const rowHeight = 20;
 
-    // Dessiner les en-têtes du tableau
     doc.font('Helvetica-Bold');
     table.headers.forEach((header, i) => {
         doc.text(header, 50 + columnWidths.slice(0, i).reduce((a, b) => a + b, 0), doc.y, {
@@ -337,7 +338,6 @@ const drawTable = (doc: PDFKit.PDFDocument, table: { headers: string[]; rows: st
     });
     doc.moveDown();
 
-    // Dessiner les lignes du tableau
     doc.font('Helvetica');
     table.rows.forEach(row => {
         row.forEach((cell, i) => {
@@ -380,5 +380,14 @@ export const getAdminReplies = async (req: Request, res: Response): Promise<void
             console.error('Erreur inconnue:', err);
             res.status(500).json({ error: 'Erreur inconnue lors de la récupération des réponses' });
         }
+    }
+};
+const handleError = (res: Response, err: unknown, defaultMessage: string) => {
+    if (err instanceof Error) {
+        console.error('Erreur:', err);
+        res.status(500).json({ error: defaultMessage, details: err.message });
+    } else {
+        console.error('Erreur inconnue:', err);
+        res.status(500).json({ error: 'Erreur inconnue' });
     }
 };

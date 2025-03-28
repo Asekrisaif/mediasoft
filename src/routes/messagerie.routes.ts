@@ -1,35 +1,20 @@
 import { Router } from 'express';
-import {
-    sendMessageToAdmin,
-    replyToClientMessage,
-    getClientMessages,
-    getAllMessagesForAdmin,
-    exportClientMessagesToCSV,
-    exportClientMessagesToPDF,
-    getAdminReplies,
-} from '../controllers/messagerie.controller';
+import { Server as SocketIOServer } from 'socket.io';
+import * as messagerieController from '../controllers/messagerie.controller';
 
-const router = Router();
+export const setupMessagerieRoutes = (io: SocketIOServer): Router => {
+    const router = Router();
+    
+    // Initialise Socket.io dans le contrôleur
+    messagerieController.initSocket(io);
 
-// Route pour envoyer un message à l'admin (client → admin)
-router.post('/send-message', sendMessageToAdmin);
+    router.post('/send-message', messagerieController.sendMessageToAdmin);
+    router.post('/reply-message', messagerieController.replyToClientMessage);
+    router.get('/client-messages/:utilisateur_id', messagerieController.getClientMessages);
+    router.get('/all-messages', messagerieController.getAllMessagesForAdmin);
+    router.get('/export-csv', messagerieController.exportClientMessagesToCSV);
+    router.get('/export-pdf', messagerieController.exportClientMessagesToPDF);
+    router.get('/admin-replies', messagerieController.getAdminReplies);
 
-// Route pour répondre à un message (admin → client)
-router.post('/reply-message', replyToClientMessage);
-
-// Route pour récupérer les messages d'un client (client ou admin)
-router.get('/client-messages/:utilisateur_id', getClientMessages);
-
-// Route pour récupérer tous les messages (admin seulement)
-router.get('/all-messages', getAllMessagesForAdmin);
-
-// Route pour exporter les messages en CSV
-router.get('/export-csv', exportClientMessagesToCSV);
-
-// Route pour exporter les messages en PDF
-router.get('/export-pdf', exportClientMessagesToPDF);
-
-// Route pour récupérer les réponses de l'admin
-router.get('/admin-replies', getAdminReplies);
-
-export default router;
+    return router;
+};

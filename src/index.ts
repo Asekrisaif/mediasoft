@@ -1,6 +1,6 @@
-import Server from "./models/server";
-import dotenv from 'dotenv';
+import ExpressServer from './models/server.model';
 
-dotenv.config(); // Charge les variables d'environnement
+// Création du serveur
+const server = new ExpressServer();
 
-const server = new Server(); // Crée une instance du serveur
+// Plus besoin d'initialiser séparément, c'est fait dans le constructeur de ExpressServer

@@ -132,11 +132,15 @@ model Messagerie {
   id             Int        @id @default(autoincrement())
   contenu        String
   date_envoi     DateTime   @default(now())
+  lu             Boolean    @default(false)
   utilisateur    Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
   utilisateur_id Int
-  parent_message_id Int?    // Lier la réponse au message original
+  parent_message_id Int?
   parentMessage  Messagerie? @relation("ParentMessage", fields: [parent_message_id], references: [id])
-  replies        Messagerie[] @relation("ParentMessage") // Réponses liées à ce message
+  replies        Messagerie[] @relation("ParentMessage")
+  
+  @@index([utilisateur_id])
+  @@index([parent_message_id])
 }
 
 model ResetToken {
