@@ -33,7 +33,8 @@ model Utilisateur {
 model Client {
   id              Int      @id
   soldePoints     Int      @default(0)
-  historiqueAchats String?
+  historiqueAchats Json?    
+  historiquePoints Json? 
   utilisateur     Utilisateur @relation(fields: [id], references: [id], onDelete: Cascade)
   panier          Panier[]
   commande        Commande[]
@@ -111,10 +112,13 @@ model Commande {
   id              Int      @id @default(autoincrement())
   total           Float
   remise         Float
+  pourcentageRemise Float?  // Nouveau champ pour stocker le pourcentage
   montantPoint   Float
   montantLivraison Float
   montantAPayer  Float
   dateLivraison  DateTime
+  pointsGagnes    Int     
+  pointsUtilises  Int    
 
   client        Client   @relation(fields: [client_id], references: [id], onDelete: Cascade)
   client_id     Int

@@ -22,7 +22,6 @@ export const sendMessageToAdmin = async (req: Request, res: Response): Promise<v
     try {
         const user = await prisma.utilisateur.findUnique({
             where: { id: utilisateur_id },
-            include: { client: true },
         });
 
         if (!user || user.role !== 'client') {
@@ -36,6 +35,15 @@ export const sendMessageToAdmin = async (req: Request, res: Response): Promise<v
                 date_envoi: new Date(),
                 utilisateur_id,
             },
+            include: {
+                utilisateur: {
+                    select: {
+                        id: true,
+                        nom: true,
+                        email: true,
+                    }
+                }
+            }
         });
 
         // Émettre le nouveau message à tous les admins
@@ -46,7 +54,6 @@ export const sendMessageToAdmin = async (req: Request, res: Response): Promise<v
         handleError(res, err, 'Erreur lors de l\'envoi du message');
     }
 };
-
 
 export const replyToClientMessage = async (req: Request, res: Response): Promise<void> => {
     const { message_id, admin_id, contenu } = req.body;
@@ -59,7 +66,6 @@ export const replyToClientMessage = async (req: Request, res: Response): Promise
     try {
         const admin = await prisma.utilisateur.findUnique({
             where: { id: admin_id },
-            include: { admin: true },
         });
 
         if (!admin || admin.role !== 'admin') {
@@ -83,10 +89,24 @@ export const replyToClientMessage = async (req: Request, res: Response): Promise
                 utilisateur_id: admin_id,
                 parent_message_id: message_id,
             },
+            include: {
+                utilisateur: {
+                    select: {
+                        id: true,
+                        nom: true,
+                        email: true,
+                    }
+                }
+            }
         });
 
-        // Émettre la réponse uniquement au client concerné
+        // Émettre la réponse au client concerné et aux admins
         io.to(`user_${originalMessage.utilisateur_id}`).emit('new_message_client', replyMessage);
+        io.emit('new_admin_reply', {
+            ...replyMessage,
+            originalMessageId: message_id,
+            clientId: originalMessage.utilisateur_id
+        });
 
         res.status(201).json({ message: 'Réponse envoyée avec succès', data: replyMessage });
     } catch (err) {
