@@ -79,6 +79,9 @@ class ExpressServer {
         this.app.get('/low-stock', (req, res) => {
             res.sendFile(path.join(__dirname, '..', '..', 'public', 'low-stock.html'));
         });
+        this.app.get('/historique-achats', (req, res) => {
+            res.sendFile(path.join(__dirname, '..', '..', 'public', 'historique-achats.html'));
+        });
     }
 
     private socketEvents(): void {
