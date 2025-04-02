@@ -76,6 +76,7 @@ model Panier {
   id            Int      @id @default(autoincrement())
   date          DateTime
   total         Float    @default(0)
+  remise        Float    @default(0) // Ajoutez cette ligne
   livrerDomicile Boolean @default(false)
   client        Client   @relation(fields: [client_id], references: [id], onDelete: Cascade)
   client_id     Int
@@ -94,7 +95,7 @@ model Produit {
   seuilMin      Int
   deleted       Boolean  @default(false)
   lignePanier   LignePanier[]
-  avis          Avis[]    // Ajoutez cette ligne pour la relation inverse
+  avis          Avis[]    
 }
 
 model LignePanier {
@@ -111,12 +112,12 @@ model LignePanier {
 model Commande {
   id              Int      @id @default(autoincrement())
   total           Float
-  remise         Float
-  pourcentageRemise Float?  // Nouveau champ pour stocker le pourcentage
-  montantPoint   Float
+  remise          Float
+  pourcentageRemise Float?  
+  montantPoint    Float
   montantLivraison Float
-  montantAPayer  Float
-  dateLivraison  DateTime
+  montantAPayer   Float
+  dateLivraison   DateTime
   pointsGagnes    Int     
   pointsUtilises  Int    
 
@@ -125,6 +126,7 @@ model Commande {
   panier        Panier   @relation(fields: [panier_id], references: [id], onDelete: Cascade)
   panier_id     Int
   livraison     Livraison[]
+  paiement      Paiement?  
 }
 
 model Livraison {
@@ -134,7 +136,7 @@ model Livraison {
   statutLivraison String @db.VarChar(50)
   detailPaiement  String
   commande        Commande @relation(fields: [commande_id], references: [id], onDelete: Cascade)
-  commande_id     Int
+  commande_id     Int      @unique
 }
 model Messagerie {
   id             Int        @id @default(autoincrement())
@@ -157,4 +159,14 @@ model ResetToken {
   utilisateur_id Int
   utilisateur   Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
   expiresAt     DateTime
+}
+model Paiement {
+  id            Int      @id @default(autoincrement())
+  montant       Float
+  methode       String   @default("espece")
+  detailsCarte  Json?    @default("{}")
+  statut        String   @default("en_attente")
+  date          DateTime @default(now())
+  commande      Commande @relation(fields: [commande_id], references: [id])
+  commande_id   Int      @unique
 }

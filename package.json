@@ -24,7 +24,8 @@
     "nodemailer": "^6.10.0",
     "pdfkit": "^0.16.0",
     "pg": "^8.11.3",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "stripe": "^17.7.0"
   },
   "devDependencies": {
     "@types/babel__core": "^7.20.5",
@@ -40,6 +41,7 @@
     "@types/nodemailer": "^6.4.17",
     "@types/pdfkit": "^0.13.9",
     "@types/pg": "^8.10.2",
+    "@types/stripe": "^8.0.416",
     "@types/yargs": "^17.0.33",
     "prisma": "^6.4.1",
     "ts-node": "^10.9.2",

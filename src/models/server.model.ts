@@ -1,11 +1,11 @@
-import express, { Application } from "express";
+import express from "express";
 import { createServer, Server as HttpServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import path from "path";
 import userRoutes from '../routes/user.routes';
 import routesDefault from '../routes/default.routes';
 import routesProducto from '../routes/producto.routes';
-import { setupMessagerieRoutes } from '../routes/messagerie.routes'; // Import modifié
+import { setupMessagerieRoutes } from '../routes/messagerie.routes';
 import routesNotification from '../routes/notification.routes';
 import routesProduit from '../routes/produit.routes';
 import routesCommande from '../routes/commande.routes';
@@ -15,6 +15,7 @@ import adminRoutes from '../routes/admin.routes';
 import authRoutes from '../routes/auth.routes';
 import cors from 'cors';
 import routesAvis from '../routes/avis.routes';
+import livraisonRoutes from '../routes/livraison.routes';
 
 class ExpressServer {
     public app: express.Application;
@@ -52,12 +53,11 @@ class ExpressServer {
     }
 
     private routes(): void {
-        // Initialisez le routeur de messagerie avec l'instance io
         const messagerieRouter = setupMessagerieRoutes(this.io);
 
         this.app.use('/', routesDefault);
         this.app.use('/api/productos', routesProducto);
-        this.app.use('/api/messagerie', messagerieRouter); // Utilisez le routeur initialisé
+        this.app.use('/api/messagerie', messagerieRouter);
         this.app.use('/api/notifications', routesNotification);
         this.app.use('/api/produit', routesProduit);
         this.app.use('/api/commande', routesCommande);
@@ -67,6 +67,7 @@ class ExpressServer {
         this.app.use('/api', clientRoutes);
         this.app.use('/api/users', userRoutes);
         this.app.use('/api/avis', routesAvis);
+        this.app.use('/api/livraisons', livraisonRoutes);
 
         this.app.get('/reset-password', (req, res) => {
             res.sendFile(path.join(__dirname, '..', '..', 'public', 'reset-password.html'));
@@ -81,6 +82,12 @@ class ExpressServer {
         });
         this.app.get('/historique-achats', (req, res) => {
             res.sendFile(path.join(__dirname, '..', '..', 'public', 'historique-achats.html'));
+        });
+        this.app.get('/livraisons', (req, res) => {
+            res.sendFile(path.join(__dirname, '..', '..', 'public', 'livraisons.html'));
+        });
+        this.app.get('/payment-form', (req, res) => {
+            res.sendFile(path.join(__dirname, '..', '..', 'public', 'paiement-carte.html'));
         });
     }
 

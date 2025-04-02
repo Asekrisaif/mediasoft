@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Panier" ADD COLUMN     "remise" DOUBLE PRECISION NOT NULL DEFAULT 0;

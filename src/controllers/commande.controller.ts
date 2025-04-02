@@ -1,122 +1,114 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { generateInvoicePDF } from '../utils/generateInvoicePDF';
+import Stripe from 'stripe';
+import fs from 'fs';
+import path from 'path';
 
 const prisma = new PrismaClient();
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2025-02-24.acacia' as const
+});
 
 export const validatePanierAndCreateCommande = async (req: Request, res: Response): Promise<void> => {
-    const { panier_id, utiliserPoints } = req.body;
+    const { panier_id, utiliserPoints, paymentMethod, livrerDomicile } = req.body;
 
     try {
-        // 1. Récupérer le panier avec les informations nécessaires
         const panier = await prisma.panier.findUnique({
             where: { id: panier_id },
             include: {
-                lignePanier: {
-                    include: { produit: true }
-                },
-                client: {
-                    include: { utilisateur: true }
-                }
+                lignePanier: { include: { produit: true } },
+                client: { include: { utilisateur: true } }
             }
         });
 
         if (!panier) {
-            res.status(404).json({ error: 'Panier non trouvé.' });
+            res.status(404).json({ error: 'Panier non trouvé' });
             return;
         }
 
-        // 2. Calculer le total des points du panier
-        let totalPointsPanier = 0;
-        for (const ligne of panier.lignePanier) {
-            totalPointsPanier += ligne.produit.nbrPoint * ligne.qteCmd;
-            
-            // Vérifier le stock
-            if (ligne.produit.qteStock < ligne.qteCmd) {
-                res.status(400).json({ 
-                    error: `Stock insuffisant pour ${ligne.produit.designation}` 
-                });
-                return;
-            }
-        }
+        const remise = panier.remise || 0;
+        const fraisLivraison = livrerDomicile ? 8 : 0;
+        const totalAPayer = panier.total - remise + fraisLivraison;
 
-        // 3. Nouvelle logique de réduction basée sur les points
-        let remise = 0;
-        let pointsUtilises = 0;
-
-        if (utiliserPoints && panier.client.soldePoints >= 100) {
-            const lotsDe100Points = Math.floor(panier.client.soldePoints / 100);
-            const pourcentageRemise = Math.min(lotsDe100Points * 10, 50);
-            remise = panier.total * (pourcentageRemise / 100);
-            pointsUtilises = Math.min(lotsDe100Points, 5) * 100;
-        }
-
-        // 4. Mettre à jour les stocks des produits
-        for (const ligne of panier.lignePanier) {
-            await prisma.produit.update({
-                where: { id: ligne.produit_id },
-                data: { 
-                    qteStock: { decrement: ligne.qteCmd } 
-                }
-            });
-        }
-
-        // 5. Mettre à jour le solde de points du client
-        const nouveauSolde = panier.client.soldePoints + totalPointsPanier - pointsUtilises;
-
-        const nouvelHistorique = {
-            date: new Date(),
-            pointsGagnes: totalPointsPanier,
-            pointsUtilises: pointsUtilises,
-            montant: panier.total - remise,
-            remiseAppliquee: remise > 0 ? `${(remise / panier.total * 100).toFixed(0)}%` : "Aucune"
-        };
-
-        await prisma.client.update({
-            where: { id: panier.client_id },
-            data: {
-                soldePoints: nouveauSolde,
-                historiqueAchats: nouvelHistorique
-            }
-        });
-
-        // 6. Créer la commande
         const commande = await prisma.commande.create({
             data: {
-                client_id: panier.client_id,
-                panier_id: panier.id,
                 total: panier.total,
-                remise,
-                montantPoint: totalPointsPanier,
-                pointsUtilises,
-                montantLivraison: 0,
-                montantAPayer: panier.total - remise,
-                dateLivraison: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                pointsGagnes: totalPointsPanier
+                client_id: panier.client_id,
+                remise: remise,
+                montantLivraison: fraisLivraison,
+                montantAPayer: totalAPayer,
+                panier_id: panier.id,
+                montantPoint: 0,
+                dateLivraison: new Date(),
+                pointsGagnes: 0,
+                pointsUtilises: 0,
+                livraison: {
+                    create: {
+                        date: new Date(),
+                        nomLivreur: "",
+                        statutLivraison: "en_attente",
+                        detailPaiement: ""
+                    }
+                }
+            },
+            include: {
+                livraison: true
             }
         });
 
-        // 7. Générer le PDF et envoyer la réponse
-        const pdfBuffer = await generateInvoicePDF(commande, panier.client, panier);
 
-        // Ajouter les données JSON dans les en-têtes
-        res.setHeader('X-Commande-Data', JSON.stringify({
-            message: 'Commande créée avec succès',
-            data: {
-                commande,
-                pointsGagnes: totalPointsPanier,
-                pointsUtilises,
-                nouveauSolde,
-                remiseAppliquee: remise > 0 ? `${(remise / panier.total * 100).toFixed(0)}%` : "Aucune",
-                montantFinal: panier.total - remise
+        if (paymentMethod === 'carte') {
+            // Paiement par carte - créer le paiement immédiatement
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: Math.round((panier.total - remise + fraisLivraison) * 100),
+                currency: 'eur',
+                metadata: { commande_id: commande.id },
+                description: `Commande #${commande.id}`
+            });
+
+            // Mettre à jour la livraison pour indiquer que le paiement est fait
+            await prisma.livraison.update({
+                where: { id: commande.livraison[0].id },
+                data: {
+                    statutLivraison: "en_preparation"
+                }
+            });
+
+            res.status(200).json({ 
+                paymentRequired: true,
+                redirectUrl: `/payment-form?clientSecret=${paymentIntent.client_secret}&commandeId=${commande.id}&amount=${paymentIntent.amount / 100}`
+            });
+        } else {
+            // Paiement en espèces - ne pas créer de paiement pour l'instant
+            const commandeWithRelations = await prisma.commande.findUnique({
+                where: { id: commande.id },
+                include: {
+                    client: { include: { utilisateur: true } },
+                    panier: { include: { lignePanier: { include: { produit: true } } } },
+                    livraison: true
+                }
+            });
+
+            if (!commandeWithRelations) {
+                throw new Error('Commande non trouvée');
             }
-        }));
 
-        // Envoyer le PDF en réponse
-        res.status(201)
-           .setHeader('Content-Type', 'application/pdf')
-           .setHeader('Content-Disposition', `attachment; filename=facture-${commande.id}.pdf`)
-           .send(pdfBuffer);
+            const pdfBuffer = await generateInvoicePDF(commandeWithRelations, commandeWithRelations.client, commandeWithRelations.panier);
+            
+            // Enregistrer le PDF
+            const invoicesDir = path.join(__dirname, '..', '..', 'invoices');
+            if (!fs.existsSync(invoicesDir)) {
+                fs.mkdirSync(invoicesDir, { recursive: true });
+            }
+            const invoicePath = path.join(invoicesDir, `facture-${commande.id}.pdf`);
+            fs.writeFileSync(invoicePath, pdfBuffer);
+
+            res.status(200)
+               .setHeader('Content-Type', 'application/pdf')
+               .setHeader('Content-Disposition', `attachment; filename=facture-${commande.id}.pdf`)
+               .send(pdfBuffer);
+        }
 
     } catch (err) {
         console.error('Erreur:', err);
@@ -124,8 +116,116 @@ export const validatePanierAndCreateCommande = async (req: Request, res: Respons
             error: 'Erreur lors de la création de la commande',
             details: err instanceof Error ? err.message : 'Erreur inconnue'
         });
-    } finally {
-        await prisma.$disconnect();
+    }
+};
+
+export const confirmLivraison = async (req: Request, res: Response): Promise<void> => {
+    const { commande_id, montant, methode, details } = req.body;
+
+    try {
+        // Vérifier si la commande existe
+        const commande = await prisma.commande.findUnique({
+            where: { id: commande_id },
+            include: { livraison: true }
+        });
+
+        if (!commande) {
+            res.status(404).json({ error: 'Commande non trouvée' });
+            return;
+        }
+
+        // Vérifier qu'il y a une livraison associée
+        if (!commande.livraison || commande.livraison.length === 0) {
+            res.status(404).json({ error: 'Livraison non trouvée pour cette commande' });
+            return;
+        }
+
+        // Mettre à jour le statut de livraison en utilisant l'ID de la livraison
+        await prisma.livraison.update({
+            where: { id: commande.livraison[0].id }, // Utiliser l'ID de la livraison
+            data: {
+                statutLivraison: "livrée",
+                date: new Date(),
+                detailPaiement: `Paiement ${methode} reçu`,
+                nomLivreur: details.nomLivreur || "Non spécifié" // Ajouter le nom du livreur si fourni
+            }
+        });
+
+        // Si paiement en espèces, enregistrer le paiement maintenant
+        if (methode === 'espece') {
+            await prisma.paiement.create({
+                data: {
+                    montant: montant,
+                    methode: methode,
+                    statut: "payé",
+                    commande_id: commande_id,
+                    date: new Date(),
+                    detailsCarte: ""
+                }
+            });
+        }
+
+        res.status(200).json({ message: 'Livraison confirmée et paiement enregistré' });
+
+    } catch (err) {
+        console.error('Erreur:', err);
+        res.status(500).json({ 
+            error: 'Erreur lors de la confirmation de la livraison',
+            details: err instanceof Error ? err.message : 'Erreur inconnue'
+        });
+    }
+};
+
+export const confirmCardPayment = async (req: Request, res: Response): Promise<void> => {
+    const { commande_id, paymentIntentId } = req.body;
+
+    try {
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
+            expand: ['payment_method']
+        });
+
+        if (paymentIntent.status !== 'succeeded') {
+            res.status(400).json({ error: 'Paiement non confirmé' });
+            return;
+        }
+
+        const paymentMethod = paymentIntent.payment_method as Stripe.PaymentMethod;
+        const cardDetails = paymentMethod?.card;
+
+        const commande = await prisma.commande.update({
+            where: { id: commande_id },
+            data: {
+                paiement: {
+                    create: {
+                        montant: paymentIntent.amount / 100,
+                        methode: 'carte',
+                        detailsCarte: cardDetails ? {
+                            last4: cardDetails.last4,
+                            brand: cardDetails.brand,
+                            exp_month: cardDetails.exp_month,
+                            exp_year: cardDetails.exp_year
+                        } : undefined,
+                        statut: 'payé'
+                    }
+                }
+            },
+            include: {
+                client: { include: { utilisateur: true } },
+                panier: { include: { lignePanier: { include: { produit: true } } } },
+                paiement: true
+            }
+        });
+
+        const pdfBuffer = await generateInvoicePDF(commande, commande.client, commande.panier);
+        
+        res.status(200)
+           .setHeader('Content-Type', 'application/pdf')
+           .setHeader('Content-Disposition', `attachment; filename=facture-${commande.id}.pdf`)
+           .send(pdfBuffer);
+
+    } catch (err) {
+        console.error('Erreur:', err);
+        res.status(500).json({ error: 'Erreur lors de la confirmation du paiement' });
     }
 };
 
@@ -137,7 +237,12 @@ export const downloadInvoice = async (req: Request, res: Response): Promise<void
             where: { id: Number(id) },
             include: {
                 client: { include: { utilisateur: true } },
-                panier: { include: { lignePanier: { include: { produit: true } } }}
+                panier: { 
+                    include: { 
+                        lignePanier: { include: { produit: true } } 
+                    } 
+                },
+                paiement: true
             }
         });
 
@@ -147,7 +252,6 @@ export const downloadInvoice = async (req: Request, res: Response): Promise<void
         }
 
         const pdfBuffer = await generateInvoicePDF(commande, commande.client, commande.panier);
-        
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=facture-${commande.id}.pdf`);
         res.send(pdfBuffer);
