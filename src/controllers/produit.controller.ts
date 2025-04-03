@@ -6,6 +6,20 @@ import PDFDocument from 'pdfkit';
 
 const prisma = new PrismaClient();
 
+// Interface et cache pour les produits tendance
+interface TrendingProduct {
+    id: number;
+    designation: string;
+    description: string | null;
+    images: string[];
+    prix: number;
+    nbrPoint: number;
+    clientsUniques: number;
+}
+
+let trendingProductsCache: TrendingProduct[] | null = null;
+let lastCacheUpdate: number | null = null;
+
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
     const { designation, description, images, qteStock, prix, nbrPoint, seuilMin } = req.body;
 
@@ -231,5 +245,46 @@ export const getProductDashboard = async (req: Request, res: Response): Promise<
         res.status(200).json(product);
     } catch (err) {
         res.status(500).json({ error: 'Error getting product dashboard' });
+    }
+};
+export const getTrendingProducts = async (req: Request, res: Response): Promise<void> => {
+    try {
+        // Version corrigée avec la requête SQL proprement formatée
+        const trendingProducts = await prisma.$queryRaw<TrendingProduct[]>`
+            SELECT 
+                p.id,
+                p.designation,
+                p.description,
+                p.images,
+                p.prix,
+                p."nbrPoint",
+                COUNT(DISTINCT c.client_id) as "clientsUniques"
+            FROM 
+                "Produit" p
+            LEFT JOIN 
+                "LignePanier" lp ON p.id = lp.produit_id
+            LEFT JOIN 
+                "Panier" pan ON lp.panier_id = pan.id
+            LEFT JOIN 
+                "Commande" c ON pan.id = c.panier_id
+            WHERE 
+                p.deleted = false
+            GROUP BY 
+                p.id, p.designation, p.description, p.images, p.prix, p."nbrPoint"
+            ORDER BY 
+                "clientsUniques" DESC
+            LIMIT 10
+        `;
+
+        res.status(200).json(trendingProducts.map(p => ({
+            ...p,
+            clientsUniques: Number(p.clientsUniques) || 0
+        })));
+    } catch (err) {
+        console.error('Erreur:', err);
+        res.status(500).json({ 
+            error: 'Erreur lors de la récupération des produits tendance',
+            details: err instanceof Error ? err.message : 'Erreur inconnue'
+        });
     }
 };

@@ -1,7 +1,5 @@
 import { Router } from 'express';
-import { Request, Response } from 'express';
-import path from 'path';
-import {
+import { 
     createProduct,
     getAllProducts,
     getProductById,
@@ -10,32 +8,30 @@ import {
     searchProducts,
     checkStock,
     getProductDashboard,
-    updateStock,getLowStockProducts
-} from '../controllers/produit.controller'; // Importez les nouvelles fonctions
+    updateStock,
+    getLowStockProducts,
+    getTrendingProducts
+} from '../controllers/produit.controller';
+import path from 'path';
+import { Request, Response } from 'express';
 
 const router = Router();
-// Route pour servir la page HTML des produits à faible stock
-router.get('/produits-faibles-page', (req: Request, res: Response) => {
-    // Chemin absolu vers le fichier low-stock.html dans le dossier public
-    const filePath = path.join(__dirname, '..', '..', 'public', 'low-stock.html');
-    res.sendFile(filePath);
+
+// Route pour la page HTML des produits tendance
+router.get('/produits-tendance', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../public/produits-tendance.html'));
 });
 
-router.get('/search', searchProducts); // Rechercher des produits
-// Routes pour la gestion des produits
-router.post('/', createProduct); // Créer un produit
-router.get('/', getAllProducts); // Récupérer tous les produits
-router.get('/:id', getProductById); // Récupérer un produit par ID
-router.put('/:id', updateProduct); // Mettre à jour un produit
-router.delete('/:id', deleteProduct); // Supprimer un produit
-
-
-// Routes pour la gestion des stocks
-router.get('/:id/stock', checkStock); // Vérifier le stock d'un produit
-// Route pour afficher le tableau de bord du produit
+// Les autres routes existantes
+router.get('/produits/tendance', getTrendingProducts);
+router.get('/search', searchProducts);
+router.post('/', createProduct);
+router.get('/', getAllProducts);
+router.get('/:id', getProductById);
+router.put('/:id', updateProduct);
+router.delete('/:id', deleteProduct);
+router.get('/:id/stock', checkStock);
 router.get('/admin/produit/:id', getProductDashboard);
-
-// Route pour mettre à jour le stock
 router.put('/admin/produit/:id/stock', updateStock);
 router.get('/admin/produits-faibles', getLowStockProducts);
 

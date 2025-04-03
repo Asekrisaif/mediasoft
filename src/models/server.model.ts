@@ -68,6 +68,7 @@ class ExpressServer {
         this.app.use('/api/users', userRoutes);
         this.app.use('/api/avis', routesAvis);
         this.app.use('/api/livraisons', livraisonRoutes);
+        this.app.use('/api/produit', routesProduit);
 
         this.app.get('/reset-password', (req, res) => {
             res.sendFile(path.join(__dirname, '..', '..', 'public', 'reset-password.html'));
@@ -89,6 +90,10 @@ class ExpressServer {
         this.app.get('/payment-form', (req, res) => {
             res.sendFile(path.join(__dirname, '..', '..', 'public', 'paiement-carte.html'));
         });
+        this.app.get('/produits-tendance', (req, res) => {
+            res.sendFile(path.join(__dirname, '..', '..', 'public', 'produits-tendance.html'));
+        });
+        
     }
 
     private socketEvents(): void {

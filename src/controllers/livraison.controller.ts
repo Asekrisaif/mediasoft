@@ -7,14 +7,36 @@ const prisma = new PrismaClient();
 export const createLivraison = async (req: Request, res: Response): Promise<void> => {
     const { commande_id, nomLivreur, statutLivraison, detailPaiement } = req.body;
 
+    if (!commande_id || !nomLivreur || !statutLivraison) {
+        res.status(400).json({ 
+            error: 'Les champs commande_id, nomLivreur et statutLivraison sont requis',
+            received: req.body
+        });
+        return;
+    }
+
     try {
-        // Vérifier que la commande existe
         const commande = await prisma.commande.findUnique({
             where: { id: commande_id }
         });
 
         if (!commande) {
-            res.status(404).json({ error: 'Commande non trouvée' });
+            res.status(404).json({ 
+                error: 'Commande non trouvée',
+                commande_id: commande_id
+            });
+            return;
+        }
+
+        const existingLivraison = await prisma.livraison.findFirst({
+            where: { commande_id: commande_id }
+        });
+
+        if (existingLivraison) {
+            res.status(400).json({ 
+                error: 'Une livraison existe déjà pour cette commande',
+                livraison_id: existingLivraison.id
+            });
             return;
         }
 
@@ -23,15 +45,26 @@ export const createLivraison = async (req: Request, res: Response): Promise<void
                 date: new Date(),
                 nomLivreur,
                 statutLivraison,
-                detailPaiement,
+                detailPaiement: detailPaiement || "",
                 commande_id
             }
         });
+        res.status(201).json({
+            message: 'Livraison créée avec succès',
+            data: livraison
+        });
 
-        res.status(201).json(livraison);
     } catch (error) {
-        console.error('Erreur:', error);
-        res.status(500).json({ error: 'Erreur lors de la création de la livraison' });
+        console.error('Erreur détaillée:', {
+            error: error instanceof Error ? error.message : error,
+            stack: error instanceof Error ? error.stack : undefined,
+            body: req.body
+        });
+        
+        res.status(500).json({ 
+            error: 'Erreur lors de la création de la livraison',
+            details: error instanceof Error ? error.message : 'Erreur inconnue'
+        });
     }
 };
 

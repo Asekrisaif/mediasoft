@@ -120,12 +120,24 @@ export const validatePanierAndCreateCommande = async (req: Request, res: Respons
 };
 
 export const confirmLivraison = async (req: Request, res: Response): Promise<void> => {
-    const { commande_id, montant, methode, details } = req.body;
+    const { id } = req.params; // Récupérer l'ID depuis les paramètres d'URL
+    const { montant, methode, details } = req.body;
+
+    // Validation de base
+    if (!id || isNaN(Number(id))) {
+        res.status(400).json({ error: 'ID de commande invalide' });
+        return;
+    }
+
+    if (!montant || !methode) {
+        res.status(400).json({ error: 'Les champs montant et methode sont requis' });
+        return;
+    }
 
     try {
         // Vérifier si la commande existe
         const commande = await prisma.commande.findUnique({
-            where: { id: commande_id },
+            where: { id: Number(id) },
             include: { livraison: true }
         });
 
@@ -136,39 +148,48 @@ export const confirmLivraison = async (req: Request, res: Response): Promise<voi
 
         // Vérifier qu'il y a une livraison associée
         if (!commande.livraison || commande.livraison.length === 0) {
-            res.status(404).json({ error: 'Livraison non trouvée pour cette commande' });
+            res.status(400).json({ error: 'Aucune livraison associée à cette commande' });
             return;
         }
 
-        // Mettre à jour le statut de livraison en utilisant l'ID de la livraison
+        // Mettre à jour la livraison
         await prisma.livraison.update({
-            where: { id: commande.livraison[0].id }, // Utiliser l'ID de la livraison
+            where: { id: commande.livraison[0].id },
             data: {
                 statutLivraison: "livrée",
                 date: new Date(),
                 detailPaiement: `Paiement ${methode} reçu`,
-                nomLivreur: details.nomLivreur || "Non spécifié" // Ajouter le nom du livreur si fourni
+                nomLivreur: details?.nomLivreur || "Non spécifié"
             }
         });
 
-        // Si paiement en espèces, enregistrer le paiement maintenant
+        // Enregistrer le paiement si c'est un paiement en espèces
         if (methode === 'espece') {
             await prisma.paiement.create({
                 data: {
-                    montant: montant,
+                    montant: Number(montant),
                     methode: methode,
                     statut: "payé",
-                    commande_id: commande_id,
+                    commande_id: Number(id),
                     date: new Date(),
                     detailsCarte: ""
                 }
             });
         }
 
-        res.status(200).json({ message: 'Livraison confirmée et paiement enregistré' });
+        res.status(200).json({ 
+            message: 'Livraison confirmée avec succès',
+            commandeId: id,
+            livraisonId: commande.livraison[0].id
+        });
 
     } catch (err) {
-        console.error('Erreur:', err);
+        console.error('Erreur détaillée:', {
+            error: err,
+            body: req.body,
+            params: req.params
+        });
+        
         res.status(500).json({ 
             error: 'Erreur lors de la confirmation de la livraison',
             details: err instanceof Error ? err.message : 'Erreur inconnue'

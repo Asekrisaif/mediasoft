@@ -38,6 +38,7 @@ model Client {
   utilisateur     Utilisateur @relation(fields: [id], references: [id], onDelete: Cascade)
   panier          Panier[]
   commande        Commande[]
+  produitsAchetes Produit[] @relation("ClientsAcheteurs") // Relation inverse ajoutée
 }
 
 model Admin {
@@ -85,17 +86,18 @@ model Panier {
 }
 
 model Produit {
-  id            Int      @id @default(autoincrement())
-  designation   String   @default("Désignation par défaut")
-  description   String?
-  images        String[]
-  qteStock      Int
-  prix          Float
-  nbrPoint      Int
-  seuilMin      Int
-  deleted       Boolean  @default(false)
+  id          Int      @id @default(autoincrement())
+  designation String   @default("Désignation par défaut")
+  description String?
+  images      String[]
+  qteStock    Int
+  prix        Float
+  nbrPoint    Int      // Ce champ doit exister
+  seuilMin    Int
+  deleted     Boolean  @default(false)
   lignePanier   LignePanier[]
   avis          Avis[]    
+  clientsAcheteurs Client[] @relation("ClientsAcheteurs")
 }
 
 model LignePanier {
