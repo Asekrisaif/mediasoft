@@ -12,4 +12,5 @@ router.post('/confirm-payment', confirmCardPayment);
 router.get('/:id/facture', downloadInvoice);
 router.post('/:id/confirm-livraison', confirmLivraison);
 
+
 export default router;

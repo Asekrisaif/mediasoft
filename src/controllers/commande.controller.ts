@@ -2,8 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { generateInvoicePDF } from '../utils/generateInvoicePDF';
 import Stripe from 'stripe';
-import fs from 'fs';
-import path from 'path';
+
 
 const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -57,7 +56,6 @@ export const validatePanierAndCreateCommande = async (req: Request, res: Respons
             }
         });
 
-
         if (paymentMethod === 'carte') {
             // Paiement par carte - créer le paiement immédiatement
             const paymentIntent = await stripe.paymentIntents.create({
@@ -94,16 +92,10 @@ export const validatePanierAndCreateCommande = async (req: Request, res: Respons
                 throw new Error('Commande non trouvée');
             }
 
+            // Générer le PDF
             const pdfBuffer = await generateInvoicePDF(commandeWithRelations, commandeWithRelations.client, commandeWithRelations.panier);
             
-            // Enregistrer le PDF
-            const invoicesDir = path.join(__dirname, '..', '..', 'invoices');
-            if (!fs.existsSync(invoicesDir)) {
-                fs.mkdirSync(invoicesDir, { recursive: true });
-            }
-            const invoicePath = path.join(invoicesDir, `facture-${commande.id}.pdf`);
-            fs.writeFileSync(invoicePath, pdfBuffer);
-
+            // Renvoyer le PDF en tant que réponse
             res.status(200)
                .setHeader('Content-Type', 'application/pdf')
                .setHeader('Content-Disposition', `attachment; filename=facture-${commande.id}.pdf`)
